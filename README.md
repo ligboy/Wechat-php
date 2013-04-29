@@ -1,4 +1,4 @@
-Wechat-sdk-php
+Wechat-php
 ==============
 呵呵，大家好。这个微信php类库来自于网络上多人智慧的结晶，特别是被动响应部分基本上都是来自于：dodgepudding。在此向那些牛人们致敬。 说明一下，我是个菜鸟，所以在代码上特别的凌乱，希望有热心人士指点。主动发送部分可能因为腾讯的调整失效，发现问题请联系我：ligboy#gmail.com
 欢迎大家fork或者push
@@ -14,8 +14,6 @@ TODO LIST
 
 使用方法
 --------
-        //
-
         require("./Wechat.class.php");
         $options = array(
             'etoken'=>'ddfdfasd',  //微信公共平台设置的接口token
