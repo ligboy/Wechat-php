@@ -490,35 +490,8 @@ class Wechat {
 	}
 
 	/**
-	 * 读取缓存的cookies文件
-	 * @param  string $filename 文件名
-	 * @param  string $content  文件内容
-	 * @return [type]           [description]
-	 */
-	public function readFileCookies(){
-
-		if(file_exists($this->cookiefilepath)){
-			$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/getregions?id=1054&t=ajax-getregions&lang=zh_CN&token=".$this->webtoken;
-			$response = $this->get($url, $this->protocol."://mp.weixin.qq.com/");
-			$result = json_decode($response,true);
-			if($result['num'])
-			{
-				return true;
-			}
-			else
-			{
-				return true===$this->login();
-			}
-		}
-		else
-		{
-			return true===$this->login();
-		}
-	}
-
-	/**
-	 * 验证cookie的有效性
-	 * @return boolean
+	 * 验证登录是否在线
+	 * @return boolean 
 	 */
 	public function checkValid()
 	{
@@ -594,10 +567,10 @@ class Wechat {
 	}
 
 	/**
-	 * 主动相同消息群发，目前暂支持文本方式
+	 * 主动群发相同消息，目前暂支持文本方式
 	 * @param  array $fakeidGroup     接受微信fakeid集合数组
 	 * @param  string $content 群发消息内容
-	 * @return mixed  如果所有都发送失败，返回false，否则，返回一个数组分别记录成功的列表
+	 * @return mixed  返回一个记录发送结果的数组列表
 	 * 这里需要注意请求耗时问题，目前采用curl并发性请求.
 	 */
 	public function batSend($fakeidGroup,$content)
@@ -613,12 +586,26 @@ class Wechat {
 		return $this->doQueueSend($queueSendArray);
 
 	}
+	
+	/**
+	 * 主动发送队列消息，目前暂支持文本方式
+	 * @param array 发送队列数组  array(array('fakeid'='','content'))
+	 * @param integer $queueCount 并发数量,默认10
+	 * @return mixed  返回一个记录发送结果的数组列表
+	 * 这里需要注意请求耗时问题，目前采用curl并发性请求.
+	 */
+	public function queueSend($queueSendArray,$queueCount=10)
+	{
+		return $this->doQueueSend($queueSendArray,$queueCount);
+	}
+	
 	/**
 	 * 执行主动发送队列，默认并发队列数是10
-	 * @param array 发送队列数组  array(array('fakeid'='','content'))
-	 * @return array
+	 * @param array $queueSendArray 发送队列数组  array(array('fakeid'='','content'))
+	 * @param integer $queueCount 并发数量,默认10
+	 * @return array  返回一个记录发送结果的数组列表
 	 **/
-	 public function doQueueSend($queueSendArray, $Count)
+	 private function doQueueSend($queueSendArray, $queueCount=10)
 	 {
 		$requestArray = array();
 		foreach ($queueSendArray as $key =>$value)
@@ -649,6 +636,7 @@ class Wechat {
 			}
 		};
 		$rollingCurlObj = new Rollingcurl();
+		$rollingCurlObj->setLimitCount($queueCount);
 		$response = $rollingCurlObj->setCallback("callback")->request($requestArray);
 		return $response;
 	}
