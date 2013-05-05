@@ -542,10 +542,22 @@ class Wechat {
 	}
 
 	/**
+	 * keepLive心跳包保持，在线状态，推荐通过cron每15分钟调用一下
+	 * @return boolean
+	 */
+	public function keepLive()
+	{
+		if (!$this->checkValid()) {
+			return (true===$this->login());
+		}
+		return false;
+	}
+
+	/**
 	 * 主动单条发消息
 	 * @param  string $id      用户的fakeid
 	 * @param  string $content 发送的内容
-	 * @return boolean 返回发送结果：成功返回:1,登录问题返回:-1,其他原因返回:0
+	 * @return integer 返回发送结果：成功返回:1,登录问题返回:-1,其他原因返回:0
 	 */
 	public function send($fakeid,$content)
 	{
@@ -572,42 +584,56 @@ class Wechat {
 			}
 			else
 			{
-				return false;
+				return 0;
 			}
 		}
 		else  //登录失败返回false
 		{
-			return false;
+			return 0;
 		}
 	}
 
 	/**
-	 * 主动批量发送，目前暂支持文本方式
+	 * 主动相同消息群发，目前暂支持文本方式
 	 * @param  array $fakeidGroup     接受微信fakeid集合数组
-	 * @param  [type] $content [description]
+	 * @param  string $content 群发消息内容
 	 * @return mixed  如果所有都发送失败，返回false，否则，返回一个数组分别记录成功的列表
-	 * 这里需要注意请求耗时问题，目前采用curl并发性请求，并发请求数10个
+	 * 这里需要注意请求耗时问题，目前采用curl并发性请求.
 	 */
 	public function batSend($fakeidGroup,$content)
 	{
-		$result = array();
-		$successCount = 0;
-		$requestArray = array();
+		$queueSendArray = array();
 		foreach ($fakeidGroup as $key =>$value)
 		{
+			$queueSendArray[] = array(
+					'fakeid' => $value,
+					'content' => $content
+			);
+		}
+		return $this->doQueueSend($queueSendArray);
+
+	}
+	/**
+	 * 执行主动发送队列，默认并发队列数是10
+	 * @param array 发送队列数组  array(array('fakeid'='','content'))
+	 * @return array
+	 **/
+	 public function doQueueSend($queueSendArray, $Count)
+	 {
+		$requestArray = array();
+		foreach ($queueSendArray as $key =>$value)
+		{
 			$postfields = array();
-			$postfields['tofakeid'] = $value;
+			$postfields['tofakeid'] = $value['fakeid'];
 			$postfields['type'] = 1;
 			$postfields['error']= "false";
 			$postfields['token']= $this->webtoken;
-			$postfields['content'] = $content;
+			$postfields['content'] = $value['content'];
 			$postfields['ajax'] = 1;
 			$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/singlesend?t=ajax-response";
 			$requestArray[] = array('url'=>$url,'method'=>'post','postfields'=>$postfields,'referer'=>$this->protocol."://mp.weixin.qq.com/",'cookiefilepath'=>$this->cookiefilepath);
 		}
-		//DEBUG: 
-// 		dump($requestArray);
-		$callback = function ($result, $key){
+		function callback($result, $key){
 			$tmp = json_decode($result,true);
 			//判断发送结果的逻辑部分
 			if ('ok'==$tmp["msg"]) {
@@ -623,9 +649,10 @@ class Wechat {
 			}
 		};
 		$rollingCurlObj = new Rollingcurl();
-		$response = $rollingCurlObj->setCallback($callback)->request($requestArray);
+		$response = $rollingCurlObj->setCallback("callback")->request($requestArray);
 		return $response;
 	}
+
 
 	/**
 	 * 获取用户的信息
@@ -951,6 +978,7 @@ class Rollingcurl {
 	}
 
 	/**
+	 * 返回当前并行数
 	 * @return the $limitCount
 	 */
 	public function getLimitCount() {
