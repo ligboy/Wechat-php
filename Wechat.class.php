@@ -672,6 +672,96 @@ class Wechat {
 		}
 	}
 
+
+
+	/**
+	 * 得到指定分组的用户列表
+	 * @param number $groupid
+	 * @return Ambigous <boolean, string, mixed>
+	 */
+	public function getfriendlist($groupid=0)
+	{
+		$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/contactmanagepage?token=$this->webtoken&t=wxm-friend&pagesize=100&groupid=$groupid";
+		$referer = $this->protocol."://mp.weixin.qq.com/";
+		$response = $this->get($url, $referer);
+		$tmp = "";
+		if (preg_match('%<script id="json-friendList" type="json/text">([\s\S]*?)</script>%', $response, $match)) {
+			$tmp = json_decode($match[1], true);
+		}
+		return empty($tmp)?false:$tmp;
+	
+	}
+	
+	
+	/**
+	 * 获取用户的fakeid
+	 * @param callback $callback 处理匹配结果的回调函数
+	 */
+	public function getfakeid($callback)
+	{
+		$subscribeusersModel = D("Subscribeusers");
+		$data = $subscribeusersModel->where(' `fakeid` IS NULL and `unsubscribed`=0')->select();
+		if (!is_array($data))
+		{
+			die("none data");
+		}
+		$unfriendList = $this->getfriendlist(0);
+		if (!$unfriendList){
+			die("none friendlist");
+		}
+		$requestArray = array();
+		foreach ($unfriendList as $key => $value)
+		{
+			// 			$requestArray[$key]['postfields']['createtime'] = time()-60000;
+			$requestArray[$key]['postfields']['fromfakeid'] = $value['fakeId'];
+			$requestArray[$key]['postfields']['opcode'] = 1;
+			$requestArray[$key]['postfields']['token'] = $this->webtoken;
+			$requestArray[$key]['postfields']['ajax'] = 1;
+			$requestArray[$key]['referer'] = $this->protocol."://mp.weixin.qq.com/";
+			$requestArray[$key]['cookiefilepath'] = $this->cookiefilepath;
+			$requestArray[$key]['method'] = "post";
+			$requestArray[$key]['url'] = $this->protocol."://mp.weixin.qq.com/cgi-bin/singlemsgpage?t=ajax-single-getnewmsg";
+		}
+		// 		$callback = '';
+		$rollingCurlObj = new Rollingcurl();
+		$rollingCurlObj->setOtherCallbackArg(array('data'=>$data, 'wechatObj'=>$this));
+		$response = $rollingCurlObj->setCallback($callback)->request($requestArray);
+		dump($response);
+	}
+	
+	/**
+	 * 将用户放入制定的分组
+	 * @param array $fakeidsList
+	 * @param string $groupid
+	 * @return boolean 放入是否成功
+	 */
+	public function putIntoGroup($fakeidsList, $groupid)
+	{
+		$fakeidsListString = "";
+		if(is_array($fakeidsList))
+		{
+			foreach ($fakeidsList as $value)
+			{
+				$fakeidsListString .= $value."|";
+			}
+		}
+		else
+		{
+			$fakeidsListString = $fakeidsList;
+		}
+		$postfields['contacttype'] = $groupid;
+		$postfields['tofakeidlist'] = $fakeidsListString;
+		$postfields['token'] = $this->webtoken;
+		$postfields['ajax'] = 1;
+		$referer = $this->protocol."://mp.weixin.qq.com/";
+		$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/modifycontacts?action=modifycontacts&t=ajax-putinto-group";
+		$response = $this->post($url, $postfields, $referer);
+		$tmp = json_decode($response, true);
+		$result = $tmp['ret']=="0"&&!empty($tmp)?true:false;
+		return $result;
+	}
+	
+	
 	/**
 	 * @return the $wechatOptions
 	 */
