@@ -695,12 +695,34 @@ class Wechat {
 	
 	/**
 	 * 获取用户的fakeid
-	 * @param callback $callback 处理匹配结果的回调函数
+	 * @param callback $callback 处理匹配结果的回调函数，剥离出来方便大家自己的实现自己的逻辑，大致就是循环的查找，并写入数据库之类的
+	 * 
+	 * 下面是示例：
+	 * 		function callback($result, $key, $request, $otherCallbackArg){
+	 * 			$reruen_tmp = false;
+	 * 			dump($result);
+	 * 			foreach ($otherCallbackArg['data'] as $data_key => $data_value)
+	 * 			{
+	 * 				if(false !== strpos($result, substr(md5($data_value['openid']), 0, 16)))
+	 * 				{
+	 *     	    		$subscribeusersModel = D("Subscribeusers");
+	 *         	    	$condition['openid'] = $data_value['openid'];
+	 *             	    $data = $subscribeusersModel->where($condition)->save(array('fakeid'=>$request['postfields']['fromfakeid']));
+	 *                 	$otherCallbackArg['wechatObj']->putIntoGroup($request['postfields']['fromfakeid'], 101);
+	 *                  $reruen_tmp = $data_value['openid'];
+	 *                  break;
+	 *               }
+	 *          }
+	 *          return $reruen_tmp;
+	 *     };
+	 *     print_r($this->wechatObj->getfakeid("callback"));
 	 */
 	public function getfakeid($callback)
 	{
+		//接下来是数据库的访问，大家可以按照自己的环境修改，接下来会通过回调函数解决。
 		$subscribeusersModel = D("Subscribeusers");
 		$data = $subscribeusersModel->where(' `fakeid` IS NULL and `unsubscribed`=0')->select();
+		//$data 是当前fakeid为空的用户的列表数组		
 		if (!is_array($data))
 		{
 			die("none data");
@@ -722,11 +744,10 @@ class Wechat {
 			$requestArray[$key]['method'] = "post";
 			$requestArray[$key]['url'] = $this->protocol."://mp.weixin.qq.com/cgi-bin/singlemsgpage?t=ajax-single-getnewmsg";
 		}
-		// 		$callback = '';
 		$rollingCurlObj = new Rollingcurl();
 		$rollingCurlObj->setOtherCallbackArg(array('data'=>$data, 'wechatObj'=>$this));
 		$response = $rollingCurlObj->setCallback($callback)->request($requestArray);
-		dump($response);
+// 		dump($response);
 	}
 	
 	/**
