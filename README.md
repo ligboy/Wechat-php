@@ -7,22 +7,28 @@ Wechat-php
 --------
 被动响应端没有什么好讲的，依旧是没有解决语音消息获取问题。
 主动发送方面，群发的效率还是比较高的，测试，一次群发80条消息，耗时9950.0999ms，还是很不错的。主动发送单挑消息也没什么好讲的，跟大家的都差不多，只是这里要说如果大家要用，尽量建立一个消息队列，然后批量发送，这样的效率比较高，后面更新加入针对消息队列的批量发送，不仅仅是现在的群发同一条小时，另外谁有兴趣写一下可以提交一下。
+这么久没有更新，其实是一直在测试比较重点的关联fakeid和openid的部分，现在放出其中的一种简单实现：被动响应依据时间戳判断关联fakeid与openid。
 
 TODO LIST
 --------
-1. 解决用户关注后获取用户fakeid问题，之前只可以获取openid，如何才可以让两者对应起来。
+1. 采用另外一种主动方式获取关联fakeid与openid的关联。
 
 使用方法
 --------
-        require("./Wechat.class.php");
-        $options = array(
-            'etoken'=>'ddfdfasd',  //微信公共平台设置的接口token
-            'account'=>'ligboy@gmail.com', //微信公共平台账号，您不需要主动发送消息不需要设置
-            'password'=>'********',  //微信公共平台账号密码，您不需要主动发送消息不需要设置
-        );
-        $wechatObj = new Wechat($options);  //创建Wechat的实例并初始化参数
-        $wechatObj->setCookiefilepath("./app/Runtime/");  //设置cookie文件保存目录
-        $wechatObj->setWebtokenStoragefile("./app/Runtime/webtoken.txt");  //设置webtoken的保存路径（包括文件名），您不需要主动发送消息不需要设置
+        date_default_timezone_set('Asia/Shanghai');
+        include "../Wechat.class.php";
+        //加载设置文件
+        $wechatOptions = require('./configure.php');
+        $wechatObj = new Wechat($wechatOptions);
+
+        $wechatObj->valid();//可以在认证后注释掉(只是这样可能不安全)
+
+        $wechatObj->positiveInit();  //主动响应组件初始化
+        $wechatObj->setAutoSendOpenidSwitch(TRUE);  //设置自动附带发送Openid
+        $wechatObj->setPassiveAscSwitch(TRUE, TRUE);  //设置打开被动关联组件，并获取用户详细信息
+
+        $wechatObj->getRev(); 
+
 
         //被动响应实例
 
