@@ -886,29 +886,33 @@ class Wechat {
 						CURLOPT_ENCODING       => "",           // handle all encodings
 						CURLOPT_USERAGENT      => "",     // who am i
 						CURLOPT_AUTOREFERER    => true,         // set referer on redirect
-						CURLOPT_CONNECTTIMEOUT => 120,          // timeout on connect
-						CURLOPT_TIMEOUT        => 120,          // timeout on response
+						CURLOPT_CONNECTTIMEOUT => 10,          // timeout on connect
+						CURLOPT_TIMEOUT        => 10,          // timeout on response
 						CURLOPT_MAXREDIRS      => 10,           // stop after 10 redirects
 						CURLOPT_POST            => false,            // i am sending post data
 						CURLOPT_SSL_VERIFYHOST => 0,            // don't verify ssl
 						CURLOPT_SSL_VERIFYPEER => false,        //
-						CURLOPT_FILE => $fp, //目标文件保存路径
+// 						CURLOPT_FILE => $fp, //目标文件保存路径
+// 						CURLOPT_RETURNTRANSFER => 1
 				);
 				curl_setopt_array($ch, $options);
+				$reqCookiesString = "";
 				if(is_array($this->_cookies)){
-					$reqCookiesString = "";
 					foreach ($this->_cookies as $key => $val){
 						$reqCookiesString .=  $key."=".$val."; ";
 					}
 					curl_setopt($ch, CURLOPT_COOKIE, $reqCookiesString);
 				}
-				curl_setopt($ch, CURLOPT_HEADER, true);
 				$content = curl_exec($ch);
 				$info = (curl_getinfo($ch));
 				curl_close($ch);
+				fwrite($fp, $content);
 				fclose($fp);
 				$result = array();
+				echo filesize($tmpfile);
 				if ($content && file_exists($tmpfile) && filesize($tmpfile)>0 && $info["content_type"]!="text/html") {
+					
+					echo "XXX";
 					$result["filename"] = $tmpfile;
 					$result["filesize"] = filesize($tmpfile);
 					$result['filetype'] = $info["content_type"];
@@ -1014,37 +1018,63 @@ class Wechat {
 	 */
 	public function getOneMessage($datetime=NULL, $type=NULL, $openid=NULL)
 	{
+		if (!$type) {
+			$type = $this->getRevType();
+		}
+		if (!$datetime) {
+			$datetime = $this->getRevCtime();
+		}
+		if (!$openid) {
+			$openid = $this->getRevFrom();
+		}
+		
+		file_put_contents("log.txt", "\n********".$this->getRevCtime()."*********\n",FILE_APPEND);
 		$typeList = array(Wechat::MSGTYPE_TEXT=>1, Wechat::MSGTYPE_IMAGE=>2, Wechat::MSGTYPE_VOICE=>3, Wechat::MSGTYPE_VIDEO=>4, Wechat::MSGTYPE_LOCATION=>1);
-		if ($openid && method_exists($this->_wechatcallbackFuns, "getAscStatusByOpenid") && is_array($userInfo = $this->_wechatcallbackFuns->getAscStatusByOpenid($this->getRevFrom())))
+
+		if ($openid && method_exists($this->_wechatcallbackFuns, "getAscStatusByOpenid") && is_array($userInfo = $this->_wechatcallbackFuns->getAscStatusByOpenid($openid)))
 		{
-			if (!empty($userInfo['fakeid']))
+			file_put_contents("log.txt", "A\n".serialize($userInfo),FILE_APPEND);
+			if ($userInfo['fakeid'])
 			{
-				$singleMessage = $this->getSingleMessage($userInfo['fakeid'], 1, (string)($this->getRevCtime()));
+				file_put_contents("log.txt", "B\n",FILE_APPEND);
+				$singleMessage = $this->getSingleMessage($userInfo['fakeid'], 1, (string)(intval($datetime)-10));
 				$singleMessageCount = count($singleMessage);
+				file_put_contents("log.txt", (string)(intval($datetime)-0)."\n",FILE_APPEND);
 				if ($singleMessageCount==1)
 				{
-					if($singleMessage[0]['type']==$typeList[$type])
+					file_put_contents("log.txt", "\$singleMessageCount:$singleMessageCount\n",FILE_APPEND);
+					if( $userInfo['fakeid']==$singleMessage[0]['fakeId'] && (empty($type) || $singleMessage[0]['type']==$typeList[$type]) )
 					{
+						file_put_contents("log.txt", serialize($singleMessage[0])."\n",FILE_APPEND);
 						return $singleMessage[0];
 					}
 				}
 				elseif ($singleMessageCount>1)//TODO 当前进度在这
 				{
-					for($i=$singleMessageCount-1;$i>=0;$i--)
+					for($i=0;$i<$singleMessageCount;$i++)
 					{
-						if (($datetime?$datetime:$this->getRevCtime()) == $singleMessage[$i]['dateTime'])
+						if ( $userInfo['fakeid']==$singleMessage[0]['fakeId'] && $datetime == $singleMessage[$i]['dateTime'])
 						{
+							file_put_contents("log.txt", serialize($singleMessage[$i])."\n",FILE_APPEND);
 							return $singleMessage[$i];
 						}
 						
 					}
-					if($singleMessage[$singleMessageCount-1]['type']==$typeList[$type])
+					file_put_contents("log.txt", $singleMessageCount."\n",FILE_APPEND);
+
+					for($i=0;$i<$singleMessageCount;$i++)
 					{
-						return $singleMessage[$singleMessageCount-1];
+						if( $userInfo['fakeid']==$singleMessage[$i]['fakeId'] && $singleMessage[$i]['type']==$typeList[$type])
+						{
+							
+							file_put_contents("log.txt", serialize($singleMessage[$i])."\n",FILE_APPEND);
+							return $singleMessage[$i];
+						}
 					}
 				}
 				else
 				{
+					file_put_contents("log.txt", "False\n",FILE_APPEND);
 					return FALSE;
 				}
 			}

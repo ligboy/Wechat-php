@@ -69,7 +69,15 @@ switch($revtype) {
 		}
 		break;
 	case Wechat::MSGTYPE_VOICE:
-		$wechatObj->music("我还听不懂您讲话", "我还听不懂您讲话", "http://.com/weixin/fzuer/static/voices/我不懂你.amr")->reply();
+		//多媒体消息关联获取id，并下载文件到服务器本地示例
+		$oneMessage = $wechatObj->getOneMessage($wechatObj->getRevCtime(), $wechatObj->getRevType(),$wechatObj->getRevFrom());
+		$mediaFile = array();
+		if ($oneMessage) {
+			$mediaFile = $wechatObj->getDownloadFile($oneMessage["id"]);
+		}
+		// 		$wechatObj->text(serialize($mediaFile))->reply();
+		$wechatObj->text($oneMessage?"消息id:$oneMessage[id]\n类型:$oneMessage[type]\nLO时间戳:".$wechatObj->getRevCtime()."\nMP时间戳:$oneMessage[dateTime]\n文件路径:$mediaFile[filename]\n文件大小:$mediaFile[filesize]\n文件类型:$mediaFile[filetype]":"获取失败\nLO时间戳:".$wechatObj->getRevCtime().print_r($oneMessage, TRUE))->reply();
+		
 		break;
 	default:
 		$wechatObj->text("help info")->reply();

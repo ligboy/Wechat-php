@@ -66,7 +66,7 @@ class WechatTools implements WechatSessionToolInter,WechatAscToolInter,WechatFol
 		mysql_query("set names 'utf8'", $db_link);
 		// 	$query = "Select * from 'weixin_fakelist'";
 		$result = mysql_query($sql, $db_link);
-		$row = mysql_fetch_row($result);
+		$row = mysql_fetch_assoc($result);
 		if ($row[2]!="")
 		{
 			return $row;
@@ -93,7 +93,7 @@ class WechatTools implements WechatSessionToolInter,WechatAscToolInter,WechatFol
 		mysql_select_db("db_name", $db_link);
 		mysql_query("set names 'utf8'", $db_link);
 		$result = mysql_query($sql, $db_link);
-		$row = mysql_fetch_array($result);
+		$row = mysql_fetch_assoc($result);
 		if ($row) {
 			return $row;
 		}
@@ -141,7 +141,7 @@ class WechatTools implements WechatSessionToolInter,WechatAscToolInter,WechatFol
 		mysql_select_db("db_name", $db_link);
 		mysql_query("set names 'utf8'", $db_link);
 		$result = mysql_query($sql, $db_link);
-		$row = mysql_fetch_row($result);
+		$row = mysql_fetch_assoc($result);
 		var_dump($row);
 		if ($row[2]==="0")
 		{
