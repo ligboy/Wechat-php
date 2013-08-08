@@ -43,14 +43,14 @@ interface WechatAscToolInter {
 	/**
 	 * @name 判断指定Openid是否关联
 	 * @param string $Openid 指定Openid
-	 * @return boolean 返回逻辑判断结果
+	 * @return boolean 返回逻辑判断结果,已关联则返回用户信息数组
 	 */
 	function getAscStatusByOpenid($Openid);
 
 	/**
 	 * @name 判断指定fakeid是否关联
 	 * @param string $fakeid 指定fakeid
-	 * @return boolean 返回逻辑判断结果
+	 * @return boolean 返回逻辑判断结果,已关联则返回用户信息数组
 	 */
 	function getAscStatusByFakeid($fakeid);
 
@@ -106,7 +106,7 @@ class Wechat {
 	/* 私有参数 */
 	private $_msg;
 	private $_funcflag = false;
-	private $_receive;
+	public $_receive;
 	private $_logcallback;
 	private $_token;
 	private $_getRevRunOnce = 0;
@@ -301,33 +301,8 @@ class Wechat {
 					$this->_wechatcallbackFuns->followCancelAction($this->getRevFrom());
 				}
 			}
-// 			var_dump($this->_passiveAssociationSwitch && Wechat::MSGTYPE_EVENT!=$this->getRevType() &&	is_object($this->_wechatcallbackFuns) && method_exists($this->_wechatcallbackFuns, "getAscStatusByOpenid") && method_exists($this->_wechatcallbackFuns, "setAssociation") && !$this->_wechatcallbackFuns->getAscStatusByOpenid($this->getRevFrom()));
-			if ($this->_passiveAssociationSwitch && Wechat::MSGTYPE_EVENT!=$this->getRevType() &&	is_object($this->_wechatcallbackFuns) && method_exists($this->_wechatcallbackFuns, "getAscStatusByOpenid") && method_exists($this->_wechatcallbackFuns, "setAssociation") && !$this->_wechatcallbackFuns->getAscStatusByOpenid($this->getRevFrom()))
-			{
-// 				$messageList = $this->getMessage();
-				$messageList = $this->getMessageAjax(0, 40, 0, 99999999+intval(mt_rand(0, 99999)));
-				if ($messageList)
-				{
-					$count = 0;
-					$fakeid = "";
-					foreach ($messageList as $value)
-					{
-						if ($value["dateTime"]==$this->getRevCtime())
-						{
-							$count += 1;
-							$fakeid = $value["fakeId"];
-						}
-					}
-					if (1==$count && $fakeid!="")
-					{
-						$detailInfo = NULL;
-						if ($this->_passiveAscGetDetailSwitch) {
-							$detailInfo = $this->getContactInfo($fakeid);
-						}
-						$this->_wechatcallbackFuns->setAssociation((string)$this->getRevFrom(), $fakeid, $detailInfo);
-					}
-				}
-			}
+			$this->doAssociationAction();
+
 			$this->_getRevRunOnce = 1;
 		}
 		return $this;
@@ -353,7 +328,8 @@ class Wechat {
 	 * 获取消息接受者
 	 * @return string or boolean
 	 */
-	public function getRevTo() {
+	public function getRevTo()
+	{
 		if ($this->_receive)
 		{
 			return $this->_receive['ToUserName'];
@@ -367,7 +343,8 @@ class Wechat {
 	/**
 	 * 获取接收消息的类型
 	 */
-	public function getRevType() {
+	public function getRevType()
+	{
 		if (isset($this->_receive['MsgType']))
 		{
 			return $this->_receive['MsgType'];
@@ -669,6 +646,41 @@ class Wechat {
 		}
 	}
 
+	/**
+	 * @name 执行关联动作
+	 */
+	private function doAssociationAction()
+	{
+		//var_dump($this->_passiveAssociationSwitch && Wechat::MSGTYPE_EVENT!=$this->getRevType() &&	is_object($this->_wechatcallbackFuns) && method_exists($this->_wechatcallbackFuns, "getAscStatusByOpenid") && method_exists($this->_wechatcallbackFuns, "setAssociation") && !$this->_wechatcallbackFuns->getAscStatusByOpenid($this->getRevFrom()));
+		if ($this->_passiveAssociationSwitch && Wechat::MSGTYPE_EVENT!=$this->getRevType() &&	is_object($this->_wechatcallbackFuns) && method_exists($this->_wechatcallbackFuns, "getAscStatusByOpenid") && method_exists($this->_wechatcallbackFuns, "setAssociation") && !$this->_wechatcallbackFuns->getAscStatusByOpenid($this->getRevFrom()))
+		{
+			//$messageList = $this->getMessage();
+			$messageList = $this->getMessageAjax(0, 40, 0, 99999999+intval(mt_rand(0, 99999)));
+			if ($messageList)
+			{
+				$count = 0;
+				$fakeid = "";
+				foreach ($messageList as $value)
+				{
+					if ($value["dateTime"]==$this->getRevCtime())
+					{
+						$count += 1;
+						$fakeid = $value["fakeId"];
+					}
+				}
+				if (1==$count && $fakeid!="")
+				{
+					$detailInfo = NULL;
+					if ($this->_passiveAscGetDetailSwitch)
+					{
+						$detailInfo = $this->getContactInfo($fakeid);
+					}
+					$this->_wechatcallbackFuns->setAssociation((string)$this->getRevFrom(), $fakeid, $detailInfo);
+				}
+			}
+		}
+	}
+	
 	/**
 	 * 验证登录是否在线
 	 * @return boolean 
@@ -995,6 +1007,67 @@ class Wechat {
 			}
 			
 		}
+	}
+	/**
+	 * @name 得到确定的某条消息(因为微信两个时间戳有时不同, 所以这个接口效果不完美)
+	 * @param string $datetime 
+	 */
+	public function getOneMessage($datetime=NULL, $type=NULL, $openid=NULL)
+	{
+		$typeList = array(Wechat::MSGTYPE_TEXT=>1, Wechat::MSGTYPE_IMAGE=>2, Wechat::MSGTYPE_VOICE=>3, Wechat::MSGTYPE_VIDEO=>4, Wechat::MSGTYPE_LOCATION=>1);
+		if ($openid && method_exists($this->_wechatcallbackFuns, "getAscStatusByOpenid") && is_array($userInfo = $this->_wechatcallbackFuns->getAscStatusByOpenid($this->getRevFrom())))
+		{
+			if (!empty($userInfo['fakeid']))
+			{
+				$singleMessage = $this->getSingleMessage($userInfo['fakeid'], 1, (string)($this->getRevCtime()));
+				$singleMessageCount = count($singleMessage);
+				if ($singleMessageCount==1)
+				{
+					if($singleMessage[0]['type']==$typeList[$type])
+					{
+						return $singleMessage[0];
+					}
+				}
+				elseif ($singleMessageCount>1)//TODO 当前进度在这
+				{
+					for($i=$singleMessageCount-1;$i>=0;$i--)
+					{
+						if (($datetime?$datetime:$this->getRevCtime()) == $singleMessage[$i]['dateTime'])
+						{
+							return $singleMessage[$i];
+						}
+						
+					}
+					if($singleMessage[$singleMessageCount-1]['type']==$typeList[$type])
+					{
+						return $singleMessage[$singleMessageCount-1];
+					}
+				}
+				else
+				{
+					return FALSE;
+				}
+			}
+		}
+		//获取40条最新的公共消息列表
+		$messageList = $this->getMessageAjax(0, 40, 0, 99999999+intval(mt_rand(0, 99999)));
+		$messageListCount = count($messageList);
+		if ($messageListCount>0) {
+			$matchMessageList = array();
+			for($i=0;$i<$messageListCount;$i++)
+			{
+				if (($datetime?$datetime:$this->getRevCtime()) == $messageList[$i]['dateTime'] && ($type?($messageList[$i]['type']==$typeList[$type]):true))
+				{
+					$matchMessageList[] = $messageList[$i];
+				}
+				
+			}
+			if (count($matchMessageList)==1) {
+				return $matchMessageList[0];
+			}
+		}
+		return FALSE;
+		
 	}
 
 	/**
