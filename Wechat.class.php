@@ -702,7 +702,7 @@ class Wechat {
 		$postfields = array();
 		$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/getregions?id=1054&t=ajax-getregions&lang=zh_CN&token=".$this->webtoken;
 		//判断cookie是否为空，为空的话自动执行登录
-		if ($this->_cookies[$session]||$this->_cookies[$session] = $this->getCookies($session))
+		if ($this->_cookies[$session]||($this->_cookies[$session] = $this->getCookies($session)))
 		{
 			$this->curlInit("single");
 			$response = $this->_curlHttpObject->get($url, $this->protocol."://mp.weixin.qq.com/cgi-bin/", $this->_cookies[$session]);
