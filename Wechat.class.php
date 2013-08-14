@@ -22,15 +22,18 @@ interface WechatSessionToolInter {
 
 	/**
 	 * @name 获取Cookies
+     * @param string $session
 	 *
 	 */
-	function getCookies();
+	function getCookies($session);
 
-	/**
-	 * @name 设置保存Cookies
-	 * @param string $Cookies
-	 */
-	function setCookies($Cookies);
+    /**
+     * @name 设置保存Cookies
+     * @param string $Cookies
+     * @param string $session
+     * @return
+     */
+	function setCookies($Cookies, $session);
 }
 
 /**
@@ -145,7 +148,7 @@ class Wechat {
 	 * @name 主动动作初始化
 	 * @return Wechat
 	 */
-	function positiveInit()
+	function positiveInit($session="default")
 	{
 		if (!is_object($this->_wechatcallbackFuns)) {
 			if ($this->wechatOptions['wechattool']) {
@@ -153,7 +156,7 @@ class Wechat {
 			}
 			$this->setWechatToolFun($this->wechatOptions['wechattool']);
 		}
-		$this->_cookies = $this->getCookies();
+		$this->_cookies[$session] = $this->getCookies($session);
 		$this->webtoken = (string)$this->getToken();
 		return $this;
 	}
@@ -199,7 +202,8 @@ class Wechat {
 	/**
 	 * 验证当前请求是否有效
 	 * @param bool $return 是否返回
-	 */
+     * @return bool|string
+     */
 	public function valid($return=false)
 	{
 		$echoStr = isset($_GET["echostr"]) ? $_GET["echostr"]: '';
@@ -247,11 +251,12 @@ class Wechat {
 	}
 
 
-	/**
-	 * 设置发送消息
-	 * @param array $msg 消息数组
-	 * @param bool $append 是否在原消息数组追加
-	 */
+    /**
+     * 设置发送消息
+     * @param array|string $msg 消息数组
+     * @param bool $append 是否在原消息数组追加
+     * @return array
+     */
 	public function Message($msg = '',$append = false){
 		if (is_null($msg)) {
 			$this->_msg =array();
@@ -439,10 +444,10 @@ class Wechat {
 			return false;
 	}
 
-	/**
-	 * 获取接收语言推送
-	 * @return 
-	 */
+    /**
+     * 获取接收语言推送
+     * @return array|bool
+     */
 	public function getRevVoice(){
 		if (isset($this->_receive['MediaId'])){
 			return array(
@@ -495,6 +500,7 @@ class Wechat {
 		}
 		$attr   = trim($attr);
 		$attr   = empty($attr) ? '' : " {$attr}";
+        $xml    =null;
 		$xml   .= "<{$root}{$attr}>";
 		$xml   .= self::data_to_xml($data, $item, $id);
 		$xml   .= "</{$root}>";
@@ -505,7 +511,8 @@ class Wechat {
 	 * 设置回复消息
 	 * Examle: $obj->text('hello')->reply();
 	 * @param string $text
-	 */
+     * @return $this
+     */
 	public function text($text='')
 	{
 		if ($this->_autosendopenid) {
@@ -537,7 +544,8 @@ class Wechat {
 	 * @param string $desc
 	 * @param string $musicurl
 	 * @param string $hgmusicurl
-	 */
+     * @return $this
+     */
 	public function music($title,$desc,$musicurl,$hgmusicurl='') {
 		$FuncFlag = $this->_funcflag ? 1 : 0;
 		$msg = array(
@@ -560,7 +568,8 @@ class Wechat {
 	/**
 	 * 设置回复图文
 	 * @param array $newsData
-	 * @example 数组结构:
+     * @return $this
+     * @example 数组结构:
 	 *  array(
 	 *  	[0]=>array(
 	 *  		'Title'=>'msg title',
@@ -589,13 +598,14 @@ class Wechat {
 		return $this;
 	}
 
-	/**
-	 *
-	 * 向微信服务器回复消息
-	 * Example: $this->text('msg tips')->reply();
-	 * @param string $msg 要发送的信息, 默认取$this->_msg
-	 * @param bool $return 是否返回信息而输出  默认：false
-	 */
+    /**
+     *
+     * 向微信服务器回复消息
+     * Example: $this->text('msg tips')->reply();
+     * @param array|string $msg 要发送的信息, 默认取$this->_msg
+     * @param bool $return 是否返回信息而输出  默认：false
+     * @return string
+     */
 	public function reply($msg=array(),$return = false)
 	{
 		if (empty($msg))
@@ -617,11 +627,12 @@ class Wechat {
 	}
 
 
-	/**
-	 * 登录微信公共平台，获取并保存cookie、webtoken到指定文件
-	 * @return mixed 成功则返回true，失败则返回失败
-	 */
-	public function login(){
+    /**
+     * 登录微信公共平台，获取并保存cookie、webtoken到指定文件
+     * @param string $session
+     * @return mixed 成功则返回true，失败则返回失败代码
+     */
+	public function login($session='default'){
 		$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/login?lang=zh_CN";
 		$postfields["username"] = $this->wechatOptions['account'];
 		$postfields["pwd"] = md5($this->wechatOptions['password']);
@@ -629,14 +640,14 @@ class Wechat {
 		$postfieldss = "username=".urlencode($this->wechatOptions['account'])."&pwd=".urlencode(md5($this->wechatOptions['password']))."&f=json";
 
 		$this->curlInit("single");
-		$response = $this->_curlHttpObject->post($url, $postfields, $this->protocol."://mp.weixin.qq.com/cgi-bin/login", $this->_cookies);
+		$response = $this->_curlHttpObject->post($url, $postfields, $this->protocol."://mp.weixin.qq.com/cgi-bin/login", $this->_cookies[$session]);
 		$result = json_decode($response, true);
 		if ($result['ErrCode']=="65201"||$result['ErrCode']=="65202"||$result['ErrCode']=="0")
 		{
 			preg_match('/&token=([\d]+)/i', $result['ErrMsg'],$match);
 			$this->webtoken = $match[1];
 			$this->setToken($this->webtoken);
-			$this->setCookies($this->_curlHttpObject->getCookies());
+			$this->setCookies($this->_curlHttpObject->getCookies(),$session);
 			return true;
 		}
 		else
@@ -680,20 +691,21 @@ class Wechat {
 			}
 		}
 	}
-	
-	/**
-	 * 验证登录是否在线
-	 * @return boolean 
-	 */
-	public function checkValid()
+
+    /**
+     * 验证登录是否在线
+     * @param string $session
+     * @return boolean
+     */
+	public function checkValid($session='default')
 	{
 		$postfields = array();
 		$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/getregions?id=1054&t=ajax-getregions&lang=zh_CN&token=".$this->webtoken;
 		//判断cookie是否为空，为空的话自动执行登录
-		if ($this->_cookies||$this->_cookies = $this->getCookies())
+		if ($this->_cookies[$session]||$this->_cookies[$session] = $this->getCookies($session))
 		{
 			$this->curlInit("single");
-			$response = $this->_curlHttpObject->get($url, $this->protocol."://mp.weixin.qq.com/cgi-bin/", $this->_cookies);
+			$response = $this->_curlHttpObject->get($url, $this->protocol."://mp.weixin.qq.com/cgi-bin/", $this->_cookies[$session]);
 			$result = json_decode($response,1);
 			if(isset($result['num']))
 			{
@@ -710,28 +722,35 @@ class Wechat {
 		}
 	}
 
-	/**
-	 * keepLive心跳包保持，在线状态，推荐通过cron每15分钟调用一下
-	 * @return boolean
-	 */
-	public function keepLive()
+    /**
+     * keepLive心跳包保持，在线状态，推荐通过cron每15分钟调用一下
+     * @param string $session
+     * @return boolean
+     */
+	public function keepLive($session="default")
 	{
-		if (!$this->checkValid()) {
-			return (true===$this->login());
+/*        if($session && strpos($session, ","))
+        {
+            $sessionList = explode(",", $session);
+
+        }*/
+		if (!$this->checkValid($session)) {
+			return (true===$this->login($session));
 		}
 		return 1;
 	}
 
-	/**
-	 * 主动单条发消息
-	 * @param  string $id      用户的fakeid
-	 * @param  string $content 发送的内容
-	 * @return integer 返回发送结果：成功返回:1,登录问题返回:-1,其他原因返回:0
-	 */
-	public function send($fakeid,$content)
+    /**
+     * 主动单条发消息
+     * @param $fakeid
+     * @param  string $content 发送的内容
+     * @param string $session
+     * @return integer 返回发送结果：成功返回:1,登录问题返回:-1,其他原因返回:0
+     */
+	public function send($fakeid, $content, $session="default")
 	{
 		//判断cookie是否为空，为空的话自动执行登录
-		if (file_exists($this->cookiefilepath)||true===$this->login())
+		if ($this->_cookies[$session]||true===$this->login($session))
 		{
 			$postfields = array();
 			$postfields['tofakeid'] = $fakeid;
@@ -742,7 +761,7 @@ class Wechat {
 			$postfields['ajax'] = 1;
 			$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/singlesend?t=ajax-response";
 			$this->curlInit("single");
-			$response = $this->_curlHttpObject->post($url, $postfields, $this->protocol."://mp.weixin.qq.com/", $this->_cookies);
+			$response = $this->_curlHttpObject->post($url, $postfields, $this->protocol."://mp.weixin.qq.com/", $this->_cookies[$session]);
 			$tmp = json_decode($response,true);
 			//判断发送结果的逻辑部分
 			if ('ok'==$tmp["msg"]) {
@@ -763,30 +782,33 @@ class Wechat {
 		}
 	}
 
-	/**
-	 * 主动群发相同消息，目前暂支持文本方式
-	 * @param  array $fakeidGroup     接受微信fakeid集合数组
-	 * @param  string $content 群发消息内容
-	 * @return mixed  返回一个记录发送结果的数组列表
-	 * 这里需要注意请求耗时问题，目前采用curl并发性请求.
-	 */
-	public function batSend($fakeidGroup,$content)
+    /**
+     * 主动群发相同消息，目前暂支持文本方式
+     * @param  array $fakeidGroup     接受微信fakeid集合数组
+     * @param  string $content 群发消息内容
+     * @param string $session
+     * @return mixed  返回一个记录发送结果的数组列表
+     * 这里需要注意请求耗时问题，目前采用curl并发性请求.
+     */
+	public function batSend($fakeidGroup,$content, $session="default")
 	{
 		$queueSendArray = array();
 		foreach ($fakeidGroup as $key =>$value)
 		{
+
 			$queueSendArray[] = array(
 					'fakeid' => $value,
-					'content' => $content
+					'content' => $content,
+                    'type'    => Wechat::MSGTYPE_TEXT,
+                    'session' => $session
 			);
 		}
 		return $this->doQueueSend($queueSendArray);
-
 	}
 	
 	/**
 	 * 主动发送队列消息，目前暂支持文本方式
-	 * @param array 发送队列数组  array(array('fakeid'='','content'))
+	 * @param array 发送队列数组<br />array(array('fakeid'=>'','content'=>"", 'type'=>''text' , 'session'=>'default'))
 	 * @param integer $queueCount 并发数量,默认10
 	 * @return mixed  返回一个记录发送结果的数组列表
 	 * 这里需要注意请求耗时问题，目前采用curl并发性请求.
@@ -807,15 +829,18 @@ class Wechat {
 		$requestArray = array();
 		foreach ($queueSendArray as $key =>$value)
 		{
-			$postfields = array();
-			$postfields['tofakeid'] = $value['fakeid'];
-			$postfields['type'] = 1;
-			$postfields['error']= "false";
-			$postfields['token']= $this->webtoken;
-			$postfields['content'] = $value['content'];
-			$postfields['ajax'] = 1;
+            $postfields = array();
+            switch($value['type'])
+            {
+                case null:
+                case Wechat::MSGTYPE_TEXT:
+                    $postfields = $this->buildTextPostFields($value);
+                    break;
+                default:
+                    break;
+            }
 			$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/singlesend?t=ajax-response";
-			$requestArray[] = array('url'=>$url,'method'=>'post','postfields'=>$postfields,'referer'=>$this->protocol."://mp.weixin.qq.com/",'cookies'=>$this->_cookies);
+			$requestArray[$key] = array('url'=>$url,'method'=>'post','postfields'=>$postfields,'referer'=>$this->protocol."://mp.weixin.qq.com/",'cookies'=>$this->_cookies[($value['session']?$value['session']:"default")]);
 		}
 		function callback($result, $key){
 			$tmp = json_decode($result,true);
@@ -839,18 +864,19 @@ class Wechat {
 	}
 
 
-	/**
-	 * 获取用户的信息
-	 * @param  string $fakeid 用户的fakeid
-	 * @return mixed 如果成功获取返回数据数组，登录问题返回false，其他未知问题返回true，
-	 */
-	public function getContactInfo($fakeid)
+    /**
+     * 获取用户的信息
+     * @param  string $fakeid 用户的fakeid
+     * @param string $session
+     * @return mixed 如果成功获取返回数据数组，登录问题返回false，其他未知问题返回true，
+     */
+	public function getContactInfo($fakeid, $session='default')
 	{
 		$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/getcontactinfo?t=ajax-getcontactinfo&lang=zh_CN&fakeid=".$fakeid;
 		$this->curlInit("single");
 		$postfields = array("token"=>$this->webtoken, "ajax"=>1);
-		$response = $this->_curlHttpObject->post($url, $postfields, $this->protocol."://mp.weixin.qq.com/", $this->_cookies);
-		$result = json_decode($response,1);
+		$response = $this->_curlHttpObject->post($url, $postfields, $this->protocol."://mp.weixin.qq.com/", $this->_cookies[$session]);
+		$result = json_decode($response, 1);
 		if($result['FakeId']){
 			return $result;
 		}
@@ -864,14 +890,16 @@ class Wechat {
 		}
 	}
 
-	/**
-	 * 获取消息所附文件
-	 * @param  string $msgid 消息的id
-	 * @return array 如果成功获取返回下载的文件的基本信息
-	 */
-	public function getDownloadFile($msgid, $filepath = null)
+    /**
+     * 获取消息所附文件
+     * @param  string $msgid 消息的id
+     * @param null $filepath
+     * @param string $session
+     * @return array 如果成功获取返回下载的文件的基本信息
+     */
+	public function getDownloadFile($msgid, $filepath = null, $session="default")
 	{
-		if ($this->_cookies||true===$this->login())
+		if ($this->_cookies[$session]||true===$this->login($session))
 		{
 			$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/downloadfile?token=".$this->webtoken."&msgid=$msgid&source=";
 			$ch = curl_init();
@@ -897,8 +925,8 @@ class Wechat {
 				);
 				curl_setopt_array($ch, $options);
 				$reqCookiesString = "";
-				if(is_array($this->_cookies)){
-					foreach ($this->_cookies as $key => $val){
+				if(is_array($this->_cookies[$session])){
+					foreach ($this->_cookies[$session] as $key => $val){
 						$reqCookiesString .=  $key."=".$val."; ";
 					}
 					curl_setopt($ch, CURLOPT_COOKIE, $reqCookiesString);
@@ -912,7 +940,6 @@ class Wechat {
 				echo filesize($tmpfile);
 				if ($content && file_exists($tmpfile) && filesize($tmpfile)>0 && $info["content_type"]!="text/html") {
 					
-					echo "XXX";
 					$result["filename"] = $tmpfile;
 					$result["filesize"] = filesize($tmpfile);
 					$result['filetype'] = $info["content_type"];
@@ -922,21 +949,22 @@ class Wechat {
 		}
 		return false;
 	}
-	
-	/**
-	 * @name 获取公共消息列表（html）
-	 * @param number $day 
-	 * @param number $count 数量限制
-	 * @param number $page 页数
-	 * @return array|boolean
-	 */
-	public function getMessage($day=0, $count=100, $page=1)
+
+    /**
+     * @name 获取公共消息列表（html）
+     * @param int|number $day
+     * @param int|number $count 数量限制
+     * @param int|number $page 页数
+     * @param string $session
+     * @return array|boolean
+     */
+	public function getMessage($day=0, $count=100, $page=1, $session="default")
 	{
-		if ($this->_cookies||true===$this->login())
+		if ($this->_cookies[$session]||true===$this->login($session))
 		{
 			$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/getmessage?t=wxm-message&token=".$this->webtoken."&lang=zh_CN&count=100";
 			$this->curlInit("single");
-			$result = $this->_curlHttpObject->get($url, $this->protocol."://mp.weixin.qq.com/cgi-bin/", $this->_cookies);
+			$result = $this->_curlHttpObject->get($url, $this->protocol."://mp.weixin.qq.com/cgi-bin/", $this->_cookies[$session]);
 			if (preg_match('%<script type="json" id="json-msgList">([\s\S]*?)</script>%', $result, $match)) {
 				$tmp = json_decode($match[1], true);
 				return $tmp;
@@ -947,18 +975,20 @@ class Wechat {
 			}
 			
 		}
-	}	
-	
-	/**
-	 * @name 获取与指定用户的对话信息列表
-	 * @param string $fakeid 要获取指定用户消息的fakeid（必选）
-	 * @param number $lastmsgid 最早消息的id
-	 * @param number $createtime 最早消息的时间戳
-	 * @param string $lastmsgfromfakeid 消息最后来源
-	 */
-	public function getSingleMessage($fakeid, $lastmsgid=1, $createtime=0, $lastmsgfromfakeid=null)
+	}
+
+    /**
+     * @name 获取与指定用户的对话信息列表
+     * @param string $fakeid 要获取指定用户消息的fakeid（必选）
+     * @param int|number $lastmsgid 最早消息的id
+     * @param int|number $createtime 最早消息的时间戳
+     * @param string $lastmsgfromfakeid 消息最后来源
+     * @param string $session
+     * @return bool|mixed
+     */
+	public function getSingleMessage($fakeid, $lastmsgid=1, $createtime=0, $lastmsgfromfakeid=null, $session="default")
 	{
-		if (!empty($this->_cookies))
+		if (!empty($this->_cookies[$session]))
 		{
 			$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/singlemsgpage?t=ajax-single-getnewmsg";
 			$this->curlInit("single");
@@ -970,7 +1000,7 @@ class Wechat {
 			$postfield['lastmsgid']=$lastmsgid;
 			$postfield['token']=$this->webtoken;
 			$postfield['ajax']=1;
-			$result = $this->_curlHttpObject->post($url, $postfield, $this->protocol."://mp.weixin.qq.com/",$this->_cookies);
+			$result = $this->_curlHttpObject->post($url, $postfield, $this->protocol."://mp.weixin.qq.com/",$this->_cookies[$session]);
 			if ($result)
 			{
 				return json_decode($result, true);
@@ -978,19 +1008,20 @@ class Wechat {
 		}
 		return false;
 	}
-	
-	/**
-	 * @name 获取公共消息时间线列表
-	 * @param number $day 获取几日内的消息参数（0:当天;1:昨天;2:前天;3:最近5天.默认0）
-	 * @param number $count 获取消息数量限制.默认100
-	 * @param number $offset 获取消息开始位置,差不多是偏移分页的样子.默认是0
-	 * @param number $msgid 最后消息的id 默认为9999999999(意味着全部消息的意思)
-	 * @param boolean $timeline 这个参数决定了上面的$day是否有效，设置成false,直接按时间线排列的全部消息
-	 * @return mixed|boolean
-	 */
-	public function getMessageAjax($day=0, $count=100, $offset=1, $msgid=999999999, $timeline=1)
+
+    /**
+     * @name 获取公共消息时间线列表
+     * @param int|number $day 获取几日内的消息参数（0:当天;1:昨天;2:前天;3:最近5天.默认0）
+     * @param int|number $count 获取消息数量限制.默认100
+     * @param int|number $offset 获取消息开始位置,差不多是偏移分页的样子.默认是0
+     * @param int|number $msgid 最后消息的id 默认为9999999999(意味着全部消息的意思)
+     * @param bool|int $timeline 这个参数决定了上面的$day是否有效，设置成false,直接按时间线排列的全部消息
+     * @param string $session
+     * @return mixed|boolean
+     */
+	public function getMessageAjax($day=0, $count=100, $offset=1, $msgid=999999999, $timeline=1, $session="default")
 	{
-		if ($this->_cookies||true===$this->login())
+		if ($this->_cookies[$session]||true===$this->login($session))
 		{
 			$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/getmessage?t=ajax-message&lang=zh_CN&count=$count&timeline=".($timeline?"1":"")."&day=$day&star=&frommsgid=$msgid&cgi=getmessage&offset=".intval($offset);
 			$this->curlInit("single");
@@ -1001,7 +1032,7 @@ class Wechat {
 			$header = array(
 					"X-Requested-With" => "XMLHttpRequest"
 			);
-			$result = $this->_curlHttpObject->post($url, $postfieldArray, $this->protocol."://mp.weixin.qq.com/cgi-bin/", $this->_cookies, $header);
+			$result = $this->_curlHttpObject->post($url, $postfieldArray, $this->protocol."://mp.weixin.qq.com/cgi-bin/", $this->_cookies[$session], $header);
 			if ($result) {
 				return json_decode($result, true);
 			}
@@ -1012,11 +1043,16 @@ class Wechat {
 			
 		}
 	}
-	/**
-	 * @name 得到确定的某条消息(因为微信两个时间戳有时不同, 所以这个接口效果不完美)
-	 * @param string $datetime 
-	 */
-	public function getOneMessage($datetime=NULL, $type=NULL, $openid=NULL)
+
+    /**
+     * @name 得到确定的某条消息(因为微信两个时间戳有时不同, 所以这个接口效果不完美)
+     * @param string $datetime
+     * @param null $type
+     * @param null $openid
+     * @param string $session
+     * @return bool
+     */
+	public function getOneMessage($datetime=NULL, $type=NULL, $openid=NULL, $session="default")
 	{
 		if (!$type) {
 			$type = $this->getRevType();
@@ -1028,53 +1064,42 @@ class Wechat {
 			$openid = $this->getRevFrom();
 		}
 		
-// 		file_put_contents("log.txt", "\n********".$this->getRevCtime()."*********\n",FILE_APPEND);
 		$typeList = array(Wechat::MSGTYPE_TEXT=>1, Wechat::MSGTYPE_IMAGE=>2, Wechat::MSGTYPE_VOICE=>3, Wechat::MSGTYPE_VIDEO=>4, Wechat::MSGTYPE_LOCATION=>1);
 
 		if ($openid && method_exists($this->_wechatcallbackFuns, "getAscStatusByOpenid") && is_array($userInfo = $this->_wechatcallbackFuns->getAscStatusByOpenid($openid)))
 		{
-// 			file_put_contents("log.txt", "A\n".serialize($userInfo),FILE_APPEND);
 			if ($userInfo['fakeid'])
 			{
-// 				file_put_contents("log.txt", "B\n",FILE_APPEND);
 				$singleMessage = $this->getSingleMessage($userInfo['fakeid'], 1, (string)(intval($datetime)-10));
 				$singleMessageCount = count($singleMessage);
-// 				file_put_contents("log.txt", (string)(intval($datetime)-0)."\n",FILE_APPEND);
 				if ($singleMessageCount==1)
 				{
-// 					file_put_contents("log.txt", "\$singleMessageCount:$singleMessageCount\n",FILE_APPEND);
 					if( $userInfo['fakeid']==$singleMessage[0]['fakeId'] && (empty($type) || $singleMessage[0]['type']==$typeList[$type]) )
 					{
-// 						file_put_contents("log.txt", serialize($singleMessage[0])."\n",FILE_APPEND);
 						return $singleMessage[0];
 					}
 				}
-				elseif ($singleMessageCount>1)//TODO 当前进度在这
+				elseif ($singleMessageCount>1)
 				{
 					for($i=0;$i<$singleMessageCount;$i++)
 					{
 						if ( $userInfo['fakeid']==$singleMessage[0]['fakeId'] && $datetime == $singleMessage[$i]['dateTime'])
 						{
-// 							file_put_contents("log.txt", serialize($singleMessage[$i])."\n",FILE_APPEND);
 							return $singleMessage[$i];
 						}
 						
 					}
-// 					file_put_contents("log.txt", $singleMessageCount."\n",FILE_APPEND);
-
 					for($i=0;$i<$singleMessageCount;$i++)
 					{
 						if( $userInfo['fakeid']==$singleMessage[$i]['fakeId'] && $singleMessage[$i]['type']==$typeList[$type])
 						{
 							
-// 							file_put_contents("log.txt", serialize($singleMessage[$i])."\n",FILE_APPEND);
 							return $singleMessage[$i];
 						}
 					}
 				}
 				else
 				{
-// 					file_put_contents("log.txt", "False\n",FILE_APPEND);
 					return FALSE;
 				}
 			}
@@ -1100,17 +1125,19 @@ class Wechat {
 		
 	}
 
-	/**
-	 * @name 得到指定分组的用户列表
-	 * @param number $groupid
-	 * @return Ambigous <boolean, string, mixed>
-	 */
-	public function getfriendlist($groupid=0, $pagesize=100)
+    /**
+     * @name 得到指定分组的用户列表
+     * @param int|number $groupid
+     * @param int $pagesize
+     * @param string $session
+     * @return Ambigous <boolean, string, mixed>
+     */
+	public function getfriendlist($groupid=0, $pagesize=100, $session="default")
 	{
 		$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/contactmanagepage?token=$this->webtoken&t=wxm-friend&pagesize=$pagesize&groupid=$groupid";
 		$referer = $this->protocol."://mp.weixin.qq.com/";
 		$this->curlInit("single");
-		$response = $this->_curlHttpObject->get($url, $referer, $this->_cookies);
+		$response = $this->_curlHttpObject->get($url, $referer, $this->_cookies[$session]);
 		$tmp = "";
 		if (preg_match('%<script id="json-friendList" type="json/text">([\s\S]*?)</script>%', $response, $match)) {
 			$tmp = json_decode($match[1], true);
@@ -1148,7 +1175,7 @@ class Wechat {
 	{
 		//接下来是数据库的访问，大家可以按照自己的环境修改，接下来会通过回调函数解决。
 		$subscribeusersModel = D("Subscribeusers");
-		$data = $subscribeusersModel->where(' `fakeid` IS NULL and `unsubscribed`=0')->select();
+		$data = $subscribeusersModel->where(' 'fakeid' IS NULL and 'unsubscribed'=0')->select();
 		//$data 是当前fakeid为空的用户的列表数组
 		if (!is_array($data))
 		{
@@ -1176,14 +1203,15 @@ class Wechat {
 		$response = $rollingCurlObj->setCallback($callback)->request($requestArray);
 		// 		dump($response);
 	} */
-	
-	/**
-	 * 将用户放入制定的分组
-	 * @param array $fakeidsList
-	 * @param string $groupid
-	 * @return boolean 放入是否成功
-	 */
-	public function putIntoGroup($fakeidsList, $groupid)
+
+    /**
+     * 将用户放入制定的分组
+     * @param array $fakeidsList
+     * @param string $groupid
+     * @param string $session
+     * @return boolean 放入是否成功
+     */
+	public function putIntoGroup($fakeidsList, $groupid, $session="default")
 	{
 		$fakeidsListString = "";
 		if(is_array($fakeidsList))
@@ -1204,7 +1232,7 @@ class Wechat {
 		$referer = $this->protocol."://mp.weixin.qq.com/";
 		$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/modifycontacts?action=modifycontacts&t=ajax-putinto-group";
 		$this->curlInit("roll");
-		$response = $this->_wechatcallbackFuns->post($url, $postfields, $referer, $this->_cookies);
+		$response = $this->_wechatcallbackFuns->post($url, $postfields, $referer, $this->_cookies[$session]);
 		$tmp = json_decode($response, true);
 		$result = $tmp['ret']=="0"&&!empty($tmp)?true:false;
 		return $result;
@@ -1229,18 +1257,31 @@ class Wechat {
 			return false;
 		}
 	}
-	/**
-	 * @return the $wechatOptions
-	 */
-	public function getCookies() {
-		return $this->_wechatcallbackFuns->getCookies();
+
+    /**
+     * @param string $session
+     * @return $this
+     */
+	public function getCookies($session = "default") {
+        if(is_object($this->_wechatcallbackFuns))
+        {
+		    return $this->_wechatcallbackFuns->getCookies($session);
+        }
+        return $this;
 	}
 
 	/**
 	 * @return the $wechatOptions
 	 */
 	public function getToken() {
-		return $this->_wechatcallbackFuns->getToken();
+        if(is_object($this->_wechatcallbackFuns))
+        {
+		    return $this->_wechatcallbackFuns->getToken();
+        }
+        else
+        {
+            return false;
+        }
 	}
 	/**
 	 * @return the $wechatOptions
@@ -1249,35 +1290,51 @@ class Wechat {
 		return $this->wechatOptions;
 	}
 
-	/**
-	 * 设置微信配置信息
-	 * @param multitype:string  $wechatOptions
-	 */
-	public function setWechatOptions($wechatOptions) {
-		$this->wechatOptions = array_merge($this->wechatOptions, $wechatOptions);
+    /**
+     * 设置微信配置信息
+     * @param array $wechatOptions
+     * @return $this
+     */
+	public function setWechatOptions($wechatOptions=array()) {
+        if(is_array($wechatOptions))
+        {
+            $this->wechatOptions = array_merge($this->wechatOptions, $wechatOptions);
+        }
 		return $this;
 	}
 
-	/**
-	 * 设置cookie保存位置
-	 * @param string $cookies cookie
-	 */
-	public function setCookies($cookies) {
-		$this->_wechatcallbackFuns->setCookies($cookies);
+    /**
+     * 设置cookie保存位置
+     * @param string $cookies cookie
+     * @param string $session
+     * @return $this
+     */
+	public function setCookies($cookies, $session="default") {
+        if(is_object($this->_wechatcallbackFuns))
+        {
+            $this->_wechatcallbackFuns->setCookies($cookies, $session);
+        }
 		return $this;
 	}
-	/**
-	 * 设置token保存
-	 * @param string $token token
-	 */
-	public function setToken($token) {
-		$this->_wechatcallbackFuns->setToken($token);
+
+    /**
+     * 设置token保存
+     * @param string $token token
+     * @param string $session
+     * @return $this
+     */
+	public function setToken($token, $session="default") {
+        if(is_object($this->_wechatcallbackFuns))
+        {
+		    $this->_wechatcallbackFuns->setToken($token, $session);
+        }
 		return $this;
 	}
 
 	/**
 	 * @param boolean $debug
-	 */
+     * @return $this
+     */
 	public function setDebug($debug) {
 		$this->debug = $debug;
 		return $this;
@@ -1304,8 +1361,26 @@ class Wechat {
 	$this->_passiveAscGetDetailSwitch = $detailSwitch;
 	return $this;
 }
-	
-	
+
+    /**
+     * 构建文本类型提交表单
+     *
+     * @param $singleMessageFields 单挑表单数组
+     * @return array
+     */
+    private function buildTextPostFields($singleMessageFields)
+    {
+        $singlepostfields = array();
+        $singlepostfields['tofakeid'] = $singleMessageFields['fakeid'];
+        $singlepostfields['type'] = 1;
+        $singlepostfields['error'] = "false";
+        $singlepostfields['token'] = $this->webtoken;
+        $singlepostfields['content'] = $singleMessageFields['content'];
+        $singlepostfields['ajax'] = 1;
+        return $singlepostfields;
+    }
+
+
 }
 
 
@@ -1388,22 +1463,26 @@ class CurlHttp {
 			$this->_rolloptions = array_merge($this->_rolloptions, $options);
 		}
 	}
-	/**
-	 * @name 返回Header数组
-	 * @param resource $ch
-	 * @return string
-	 */
+
+    /**
+     * @name 返回Header数组
+     * @param resource $ch
+     * @param $result
+     * @return string
+     */
 	private function getResRawHeader($ch, $result) {
 		$ch_info = curl_getinfo($ch);
 		$header_size = $ch_info["header_size"];
 		$rawheader = substr($result, 0, $ch_info['header_size']);
 		return $rawheader;
 	}
-	/**
-	 * @name 返回Header数组
-	 * @param resource $ch
-	 * @return string
-	 */
+
+    /**
+     * @name 返回Header数组
+     * @param resource $ch
+     * @param $result
+     * @return string
+     */
 	private function getResHeader($ch, $result) {
 		$header = array();
 		$rawheader = $this->getResRawHeader($ch, $result);
@@ -1415,22 +1494,24 @@ class CurlHttp {
 		return $header;
 	}
 
-	/**
-	 * @name 返回网页主体内容
-	 * @param resource $ch
-	 * @return string 网页主体内容
-	 */
+    /**
+     * @name 返回网页主体内容
+     * @param resource $ch
+     * @param $result
+     * @return string 网页主体内容
+     */
 	private function getResBody($ch, $result) {
 		$ch_info = curl_getinfo($ch);
 		$body = substr($result, -$ch_info['download_content_length']);
 		return $body;
 	}
 
-	/**
-	 * @name 返回网页主体内容
-	 * @param resource $ch
-	 * @return array 网页主体内容
-	 */
+    /**
+     * @name 返回网页主体内容
+     * @param resource $ch
+     * @param $result
+     * @return array 网页主体内容
+     */
 	private function getResCookies($ch, $result) {
 		$rawheader = $this->getResRawHeader($ch, $result);
 		$cookies = array();
@@ -1464,13 +1545,14 @@ class CurlHttp {
 		}
 	}
 
-	/**
-	 * @param unknown $url
-	 * @param mixed $postfields
-	 * @param string $referer
-	 * @param array $reqcookies
-	 * @return unknown
-	 */
+    /**
+     * @param unknown $url
+     * @param mixed $postfields
+     * @param string $referer
+     * @param array $reqcookies
+     * @param array $reqheader
+     * @return unknown
+     */
 	function post($url, $postfields=null, $referer=null, $reqcookies=null, $reqheader=array())
 	{
 		$this->singlequeue = curl_init($url);
@@ -1514,12 +1596,14 @@ class CurlHttp {
 		$this->singlequeue = null;
 		return $this->_result;
 	}
-	/**
-	 * @param unknown $url
-	 * @param unknown $postfields
-	 * @param unknown $referer
-	 * @return unknown
-	 */
+
+    /**
+     * @param unknown $url
+     * @param unknown $referer
+     * @param null $reqcookies
+     * @param array $reqheader
+     * @return unknown
+     */
 	function get($url, $referer=null, $reqcookies=null, $reqheader=array())
 	{
 		$this->singlequeue = curl_init($url);

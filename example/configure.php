@@ -19,8 +19,8 @@ class WechatTools implements WechatSessionToolInter,WechatAscToolInter,WechatFol
 	 * @name 获取Cookies
 	 * @see WechatSessionToolInter::getCookies()
 	 */
-	public function getCookies() {
-		return $this->memcache->get("wechat_cookies");  //使用memcache高速缓存存取cookies
+	public function getCookies($session="default") {
+		return $this->memcache->get("wechat_cookies".$session);  //使用memcache高速缓存存取cookies
 	}
 
 	/** 
@@ -31,13 +31,14 @@ class WechatTools implements WechatSessionToolInter,WechatAscToolInter,WechatFol
 		return $this->memcache->get("wechat_token");  //使用memcache高速缓存存取Token
 	}
 
-	/**
-	 * @name 设置保存Cookies
-	 * @param string $Cookies
-	 * @see WechatSessionToolInter::setCookies()
-	 */
-	public function setCookies($Cookies) {
-		$this->memcache->set("wechat_cookies", $Cookies);  //使用memcache高速缓存存取cookies
+    /**
+     * @name 设置保存Cookies
+     * @param string $Cookies
+     * @param string $session
+     * @see WechatSessionToolInter::setCookies()
+     */
+	public function setCookies($Cookies, $session='default') {
+		$this->memcache->set("wechat_cookies".$session, $Cookies);  //使用memcache高速缓存存取cookies
 	}
 
 	/**
@@ -108,7 +109,8 @@ class WechatTools implements WechatSessionToolInter,WechatAscToolInter,WechatFol
 	 * @param string $openid Openid
 	 * @param string $fakeid fakeid
 	 * @param string $detailInfo 用户详细信息(可选)
-	 * @see WechatAscToolInter::setAssociation()
+     * @return resource
+     * @see WechatAscToolInter::setAssociation()
 	 */
 	function setAssociation($openid, $fakeid, $detailInfo)
 	{
@@ -127,7 +129,8 @@ class WechatTools implements WechatSessionToolInter,WechatAscToolInter,WechatFol
 	/**
 	 * @name 用户关注执行动作
 	 * @param string $openid Openid
-	 * @see WechatFollowToolInter::followAddAction()
+     * @return bool|resource
+     * @see WechatFollowToolInter::followAddAction()
 	 */
 	function followAddAction($openid)
 	{
