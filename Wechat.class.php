@@ -105,7 +105,10 @@ class Wechat {
 	const MSGTYPE_NEWS = 'news';
 	const MSGTYPE_VOICE = 'voice';
 	const MSGTYPE_VIDEO = 'video';
+    const MSGTYPE_GOODS = 'goods';
+    const MSGTYPE_CARD = 'card';
 
+    public static $POSITIVE_MSGTYPE = array('text'=>1, 'image'=>2, 'voice'=>3, 'video'=>4, 'news'=>10,'goods'=>11, 'card'=>42);  //主动消息类型代码数组
 	/* 私有参数 */
 	private $_msg;
 	private $_funcflag = false;
@@ -144,10 +147,12 @@ class Wechat {
 			$this->wechatOptions = array_merge($this->wechatOptions, $option);
 		}
 	}
-	/**
-	 * @name 主动动作初始化
-	 * @return Wechat
-	 */
+
+    /**
+     * @name 主动动作初始化
+     * @param string $session
+     * @return Wechat
+     */
 	function positiveInit($session="default")
 	{
 		if (!is_object($this->_wechatcallbackFuns)) {
@@ -744,43 +749,63 @@ class Wechat {
      * 主动单条发消息
      * @param $fakeid
      * @param  string $content 发送的内容
+     * @param string $imgcode
      * @param string $session
      * @return integer 返回发送结果：成功返回:1,登录问题返回:-1,其他原因返回:0
      */
-	public function send($fakeid, $content, $session="default")
+	public function send($fakeid, $content, $imgcode=null, $session="default")
 	{
-		//判断cookie是否为空，为空的话自动执行登录
-		if ($this->_cookies[$session]||true===$this->login($session))
-		{
-			$postfields = array();
-			$postfields['tofakeid'] = $fakeid;
-			$postfields['type'] = 1;
-			$postfields['error']= "false";
-			$postfields['token']= $this->webtoken;
-			$postfields['content'] = $content;
-			$postfields['ajax'] = 1;
-			$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/singlesend?t=ajax-response";
-			$this->curlInit("single");
-			$response = $this->_curlHttpObject->post($url, $postfields, $this->protocol."://mp.weixin.qq.com/", $this->_cookies[$session]);
-			$tmp = json_decode($response,true);
-			//判断发送结果的逻辑部分
-			if ('ok'==$tmp["msg"]) {
-				return 1;
-			}
-			elseif ($tmp['ret']=="-2000")
-			{
-				return -1;
-			}
-			else
-			{
-				return 0;
-			}
-		}
-		else  //登录失败返回false
-		{
-			return 0;
-		}
+        return $this->_send($fakeid, $content, Wechat::MSGTYPE_TEXT, $imgcode, $session);
 	}
+
+    /**
+     * 主动单条发消息
+     * @param $fakeid 消息接收人
+     * @param  string $content 发送的内容或多媒体内容的fid
+     * @param null $type 消息类型 默认：Wechat::MSGTYPE_TEXT
+     * @param null $imgcode 验证码
+     * @param string $session 会话通道
+     * @return integer 返回发送结果：成功返回:1,登录问题返回:-1;需要验证码:-6;其他
+     */
+    private function _send($fakeid, $content, $type=null, $imgcode=null, $session="default")
+    {   if($type==null)
+        {
+            $type = Wechat::MSGTYPE_TEXT;
+        }
+        //判断cookie是否为空，为空的话自动执行登录
+        if ($this->_cookies[$session]||true===$this->login($session))
+        {
+            $singleMessgae = array();
+            $singleMessgae['tofakeid'] = $fakeid;
+            $singleMessgae['content'] = $content;
+            $singleMessgae['imgcode'] = $imgcode;
+            $singleMessgae['fid'] = $content;
+            $singleMessgae['type'] = $type; //TODO 当前进度
+            $postfields = $this->buildPositiveMsgFields($singleMessgae);
+            $url = $this->protocol."://mp.weixin.qq.com/cgi-bin/singlesend?t=ajax-response";
+            $this->curlInit("single");
+            $response = $this->_curlHttpObject->post($url, $postfields, $this->protocol."://mp.weixin.qq.com/", $this->_cookies[$session]);
+            $tmp = json_decode($response,true);
+            //判断发送结果的逻辑部分
+            if ('ok'==$tmp["msg"]) {
+                return 1;
+            }
+            elseif ($tmp['ret']=="-2000")
+            {
+                return -1;
+            }
+            else
+            {
+                return $tmp['ret'];
+            }
+        }
+        else  //登录失败返回false
+        {
+            return 0;
+        }
+
+    }
+
 
     /**
      * 主动群发相同消息，目前暂支持文本方式
@@ -1127,12 +1152,12 @@ class Wechat {
 
     /**
      * @name 得到指定分组的用户列表
-     * @param int|number $groupid
-     * @param int $pagesize
+     * @param int|number $groupid 用户组id
+     * @param int $pagesize 分页大小
      * @param string $session
      * @return Ambigous <boolean, string, mixed>
      */
-	public function getfriendlist($groupid=0, $pagesize=100, $session="default")
+	public function getFriendList($groupid=0, $pagesize=100, $session="default")
 	{
 		$url = $this->protocol."://mp.weixin.qq.com/cgi-bin/contactmanagepage?token=$this->webtoken&t=wxm-friend&pagesize=$pagesize&groupid=$groupid";
 		$referer = $this->protocol."://mp.weixin.qq.com/";
@@ -1368,18 +1393,75 @@ class Wechat {
      * @param $singleMessageFields 单挑表单数组
      * @return array
      */
-    private function buildTextPostFields($singleMessageFields)
+    private function buildPositiveMsgFields($singleMessageFields)
     {
+        if(!isset($singleMessageFields['type']))
+        {
+            $singleMessageFields['type'] = Wechat::MSGTYPE_TEXT;
+        }
+        $type = $this->getPositiveMsgType($singleMessageFields['type']);
+        if(!$type)
+        {
+            $type = $this->getPositiveMsgType(Wechat::MSGTYPE_TEXT);
+            $singleMessageFields['type'] = Wechat::MSGTYPE_TEXT;
+        }
         $singlepostfields = array();
-        $singlepostfields['tofakeid'] = $singleMessageFields['fakeid'];
-        $singlepostfields['type'] = 1;
+        $singlepostfields['tofakeid'] = $singleMessageFields['tofakeid'];
         $singlepostfields['error'] = "false";
         $singlepostfields['token'] = $this->webtoken;
-        $singlepostfields['content'] = $singleMessageFields['content'];
         $singlepostfields['ajax'] = 1;
+        if(isset($singleMessageFields['imgcode'])&&!empty($singleMessageFields['imgcode']))
+        {
+            $singlepostfields['imgcode'] = $singleMessageFields['imgcode'];
+        }
+        switch($singleMessageFields['type'])
+        {
+            case Wechat::MSGTYPE_TEXT:
+                $singlepostfields['type'] = 1;
+                $singlepostfields['content'] = $singleMessageFields['content'];
+                break;
+            case Wechat::MSGTYPE_IMAGE:
+                $singlepostfields['type'] = 2;
+                $singlepostfields['fid'] = $singleMessageFields['fid'];
+                $singlepostfields['fileId'] = $singleMessageFields['fid'];
+                break;
+            case Wechat::MSGTYPE_VOICE:
+                $singlepostfields['type'] = 3;
+                $singlepostfields['fid'] = $singleMessageFields['fid'];
+                $singlepostfields['fileId'] = $singleMessageFields['fid'];
+                break;
+            case Wechat::MSGTYPE_VIDEO:
+                $singlepostfields['type'] = 4;
+                $singlepostfields['fid'] = $singleMessageFields['fid'];
+                $singlepostfields['fileId'] = $singleMessageFields['fid'];
+                break;
+            case Wechat::MSGTYPE_NEWS:
+                $singlepostfields['type'] = 10;
+                $singlepostfields['appmsgid'] = $singleMessageFields['fid'];
+                $singlepostfields['fid'] = $singleMessageFields['fid'];
+                break;
+            //TODO:增加物品和名片支持
+
+        }
         return $singlepostfields;
     }
 
+    /**
+     * @name 获取指定消息类型的主动类型编号
+     * @param string $msgType 消息类型，如 Wechat::MSGTYPE_TEXT
+     * @return bool|int 正确返回值，否则返回false
+     */
+    private function getPositiveMsgType($msgType)
+    {
+        if(array_keys(Wechat::$POSITIVE_MSGTYPE, $msgType))
+        {
+            return Wechat::$POSITIVE_MSGTYPE[$msgType];
+        }
+        else
+        {
+            return false;
+        }
+    }
 
 }
 
@@ -1567,11 +1649,11 @@ class CurlHttp {
 				CURLOPT_TIMEOUT        => 120,          // timeout on response
 				CURLOPT_MAXREDIRS      => 10,           // stop after 10 redirects
 				CURLOPT_POST            => true,            // i am sending post data
-				CURLOPT_POSTFIELDS     => $postfields,    // this are my post vars
 				CURLOPT_SSL_VERIFYHOST => 0,            // don't verify ssl
 				CURLOPT_SSL_VERIFYPEER => false,        //
 		);
 		curl_setopt_array($this->singlequeue, $options);
+        curl_setopt($this->singlequeue, CURLOPT_POSTFIELDS, $postfields);   // this are my post vars
 		if($referer){
 			curl_setopt($this->singlequeue, CURLOPT_REFERER, $referer);
 		}
