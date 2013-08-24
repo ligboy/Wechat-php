@@ -753,11 +753,12 @@ class Wechat {
      * 主动单条发消息
      * @param $fakeid
      * @param  string $content 发送的内容
+     * @param string $type
      * @param string $imgcode 验证码
      * @param string $session 会话通道
      * @return integer 返回发送结果：成功返回:1,登录问题返回:-1,;需要验证码:-6; 其他原因返回:0
      */
-    public function send($fakeid, $content, $type, $imgcode="fuck", $session=null)
+    public function send($fakeid, $content, $type=Wechat::MSGTYPE_TEXT, $imgcode="fuck", $session=null)
     {
         $this->processSession($session);
         return $this->_send($fakeid, $content, $type, $imgcode, $session);
@@ -778,6 +779,71 @@ class Wechat {
         return $this->_send($fakeid, $fid, $type, $imgcode, $session);
     }
 
+    //TODO Working...... 待解决图文消息添加后获取fid问题。
+    /**
+     * 通过微信号直接发送图文
+     * @param $wechatno 微信号
+     * @param $newsArray 消息数组，格式:<p>array(
+     * array('title'=>'','digest'=>'','author'=>'','image'=>'','content'=>'','sourceurl'=>''),
+     * array('title'=>'','digest'=>'','author'=>'','image'=>'','content'=>'','sourceurl'=>''),
+     * )</p>
+     * @param string $session 会话通道
+     * @return bool
+     */
+    public function sendPreNews($wechatno, $newsArray, $session=null)
+    {
+        $this->processSession($session);
+        $postfields = array();
+        $newsArray = array_values($newsArray);
+        if(count($newsArray) < 1)
+        {
+            return false;
+        }
+        $i = 0; //完备消息数量
+        foreach($newsArray as $value)
+        {
+            if(preg_match('/^[0-9]{8,9}$/', $value['image']))
+            {
+                $postfields['fileid'.$i] = $value['image'];
+            }
+            elseif($fid = $this->mediaUpload($value['image'], Wechat::MSGTYPE_IMAGE,$session))
+            {
+                $postfields['fileid'.$i] = $fid;
+            }
+            else
+            {
+                continue;
+            }
+            $postfields['title'.$i] = $value['title'];
+            $postfields['digest'.$i] = $value['desc']?$value['desc']:"";
+            $postfields['author'.$i] = $value['author']?$value['author']:"";
+            $postfields['content'.$i] = $value['content'];
+            $postfields['sourceurl'.$i] = $value['sourceurl']?$value['sourceurl']:"";
+            $i += 1;
+        }
+        if($i==0)
+        {
+            return false;
+        }
+        $postfields['count'] = $i;
+        $postfields['error'] = 'false';
+        $postfields['AppMsgId'] = "";
+        $postfields['token'] = $this->webtoken;
+        $postfields['ajax'] = 1;
+        $postfields['preusername'] = $wechatno;
+        $url = $this->protocol."://mp.weixin.qq.com/cgi-bin/operate_appmsg?sub=preview&t=ajax-appmsg-preview";
+        $this->curlInit("single");
+        $result = $this->_curlHttpObject->post($url, $postfields, $this->_referer, $this->getCookies($session));
+        $result_json_decode = json_decode($result, true);
+        if($result_json_decode && 'OK'==$result_json_decode['appMsgId'])
+        {
+            return $result_json_decode['appMsgId'];
+        }
+        else
+        {
+            return false;
+        }
+    }
     /**
      * 主动单条发消息
      * @param $fakeid 消息接收人
@@ -805,8 +871,9 @@ class Wechat {
             $singleMessgae['type'] = $type;
             $postfields = $this->buildPositiveMsgFields($singleMessgae);
             $url = $this->protocol."://mp.weixin.qq.com/cgi-bin/singlesend?t=ajax-response";
+//            $url = "http://api.fzuer.com/weixin/fzuer/index.php?m=Request&a=index";
             $this->curlInit("single");
-            $response = $this->_curlHttpObject->post($url, $postfields, $this->protocol."://mp.weixin.qq.com/", $this->_cookies[$session]);
+            $response = $this->_curlHttpObject->post($url, $postfields, $this->protocol."://mp.weixin.qq.com/cgi-bin/singlemsgpage?", $this->_cookies[$session]);
             $tmp = json_decode($response,true);
             //判断发送结果的逻辑部分
             if ('ok'==$tmp["msg"]) {
@@ -885,7 +952,7 @@ class Wechat {
             $postfields = $this->buildPositiveMsgFields($value);
 
             $url = $this->protocol."://mp.weixin.qq.com/cgi-bin/singlesend?t=ajax-response";
-            $requestArray[$key] = array('url'=>$url,'method'=>'post','postfields'=>$postfields,'referer'=>$this->protocol."://mp.weixin.qq.com/",'cookies'=>$this->_cookies[($value['session']?$value['session']:(empty($this->wechatOptions['session'])?"default":$this->wechatOptions['session']))]);
+            $requestArray[$key] = array('url'=>$url,'method'=>'post','postfields'=>$postfields,'referer'=>$this->protocol."://mp.weixin.qq.com/cgi-bin/singlemsgpage?",'cookies'=>$this->_cookies[($value['session']?$value['session']:(empty($this->wechatOptions['session'])?"default":$this->wechatOptions['session']))]);
         }
         function callback($result, $key){
             $tmp = json_decode($result,true);
@@ -946,7 +1013,7 @@ class Wechat {
     public function getUserPhoto($fakeid, $filepath=null, $session=null)
     {
         $this->processSession($session);
-        $url = $this->protocol."://mp.weixin.qq.com/cgi-bin/getheadimg?token=114483242&fakeid=$fakeid";
+        $url = $this->protocol."://mp.weixin.qq.com/cgi-bin/getheadimg?token=".$this->webtoken."&fakeid=$fakeid";
         $ch = curl_init();
         $tmpfile = $filepath?$filepath:sys_get_temp_dir().'WechatPhotoFileTemp'.$fakeid."jpg";
         $fp = @fopen($tmpfile,"w");
@@ -995,6 +1062,7 @@ class Wechat {
     }
 
     /**
+     * 修改文件媒体消息名称或删除文件媒体消息
      * @param $fid 文件id编号
      * @param string $action  执行动作，default:del 删除, other: rename
      * @param null $filename 修改后的文件名称(删除不需要)
@@ -1100,7 +1168,7 @@ class Wechat {
     }
 
     /**
-     *  上传媒体消息
+     *  上传声音、图片、视频媒体消息
      * @param $filepath 媒体文件路径
      * @param $type 上传媒体类型
      * @param string $session 会话通道，默认为: default
@@ -1162,53 +1230,105 @@ class Wechat {
             return false;
         }
     }
-    //TODO Working...... 待解决图文消息添加后获取fid问题。
-    public function mediaAddNews($newsArray, $session=null)
+
+    /**
+     * 添加图文媒体消息到媒体库
+     * @param $newsArray 消息数组，格式:<p>array(
+     * array('title'=>'','desc'=>'','author'=>'','image'=>'','content'=>'','sourceurl'=>''),
+     * array('title'=>'','desc'=>'','author'=>'','image'=>'','content'=>'','sourceurl'=>''),
+     * )</p>
+     * @param int $descLength 摘要长度,default:60
+     * @param string $session 会话通道
+     * @return bool|string 成功添加返回媒体库消息fid
+     */
+    public function mediaAddNews($newsArray, $descLength=60, $session=null)
     {
         $this->processSession($session);
         $postfields = array();
+        $identifyCode = '';
         $newsArray = array_values($newsArray);
         if(count($newsArray) < 1)
         {
             return false;
         }
-        $i = 0; //完备消息数量
+        $appMsgCount = 0; //完备消息数量
+        $identifyCode = substr(md5(microtime(true)),0,5);
         foreach($newsArray as $value)
         {
             if(preg_match('/^[0-9]{8,9}$/', $value['image']))
             {
-                $postfields['fileid'.$i] = $value['image'];
+                $postfields['fileid'.$appMsgCount] = $value['image'];
             }
             elseif($fid = $this->mediaUpload($value['image'], Wechat::MSGTYPE_IMAGE,$session))
             {
-                $postfields['fileid'.$i] = $fid;
+                $postfields['fileid'.$appMsgCount] = $fid;
             }
             else
             {
                 continue;
             }
-            $postfields['title'.$i] = $value['title'];
-            $postfields['digest'.$i] = $value['digest']?$value['digest']:"";
-            $postfields['author'.$i] = $value['author']?$value['author']:"";
-            $postfields['content'.$i] = $value['content'];
-            $postfields['sourceurl'.$i] = $value['sourceurl']?$value['sourceurl']:"";
-            $i += 1;
+            $postfields['title'.$appMsgCount] = $value['title'];
+            $postfields['digest'.$appMsgCount] = ($value['desc']?($descLength>0?mb_substr(strip_tags($value['desc']),0,$descLength, 'UTF-8'):strip_tags($value['desc'])):($descLength>0?(mb_substr(strip_tags($value['content']),0,$descLength, 'UTF-8')):strip_tags($value['content'])))."  $identifyCode";
+            $postfields['author'.$appMsgCount] = $value['author']?$value['author']:"";
+            $postfields['content'.$appMsgCount] = $value['content'];
+            $postfields['sourceurl'.$appMsgCount] = $value['sourceurl']?$value['sourceurl']:"";
+            $appMsgCount += 1;
         }
-        if($i==0)
+        if($appMsgCount==0)
         {
             return false;
         }
-        $postfields['count'] = $i;
+        $postfields['count'] = $appMsgCount;
         $postfields['error'] = 'false';
         $postfields['AppMsgId'] = "";
         $postfields['token'] = $this->webtoken;
         $postfields['ajax'] = 1;
         $url = $this->protocol."://mp.weixin.qq.com/cgi-bin/operate_appmsg?token=$this->webtoken&lang=zh_CN&t=ajax-response&sub=create";
         $this->curlInit("single");
+        $result = $this->_curlHttpObject->post($url, $postfields, 'https://mp.weixin.qq.com/cgi-bin/operate_appmsg?', $this->getCookies($session));
+        $result_json_decode = json_decode($result, true);
+        if($result_json_decode && 'OK'==$result_json_decode['msg'])
+        {
+            $mediaListArray = $this->mediaList(Wechat::MSGTYPE_NEWS,0,10);
+            if($mediaListArray)
+            {
+                foreach($mediaListArray['List'] as $value)
+                {
+                    if($postfields['count'] == $value['count'] && $value['time'] == date('Y-m-d') && strpos($value['appmsgList'][0]['desc'], $identifyCode))
+                    {
+                        return $value['appId'];
+                    }
+                }
+            }
+            return -1;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    /**
+     * 删除图文媒体消息
+     * @param $AppMsgId 图文媒体消息id
+     * @param null $session 会话通道
+     * @return bool 删除结果
+     */
+    public function mediaDelNews($AppMsgId, $session=null)
+    {
+        $this->processSession($session);
+        $url = "https://mp.weixin.qq.com/cgi-bin/operate_appmsg?sub=del&t=ajax-response";
+        $postfields = array('token'=>$this->webtoken, 'ajax'=>1, 'AppMsgId'=>$AppMsgId);
+        $this->curlInit("single");
         $result = $this->_curlHttpObject->post($url, $postfields, $this->_referer, $this->getCookies($session));
-        return $result;
+        $resutl_json_decode = json_decode($result, true);
+        if($resutl_json_decode && $resutl_json_decode['ret']==0)
+            return true;
+        else
+            return false;
     }
     /**
+     * 获取图片、声音或视频的媒体消息列表
      * @param string $type 媒体类型(必选) Wechat::MSGTYPE_*
      * @param int $pageIndex 媒体库分页页数(可选)
      * @param int $pageSize 分页大小，default:40 (可选)
@@ -1220,7 +1340,14 @@ class Wechat {
         $this->processSession($session);
         if(in_array($type,array(Wechat::MSGTYPE_IMAGE, Wechat::MSGTYPE_VOICE, Wechat::MSGTYPE_VIDEO, Wechat::MSGTYPE_NEWS)))
         {
-            $url = "https://mp.weixin.qq.com/cgi-bin/filemanagepage?token=$this->webtoken&lang=zh_CN&t=ajax-fileselect&type=".$this->getPositiveMsgType($type)."&r=".mt_rand(0,10000)."&pageIdx=$pageIndex&pagesize=$pageSize&formid=file_from_".time();
+            if($type==Wechat::MSGTYPE_NEWS)
+            {
+                $url = "https://mp.weixin.qq.com/cgi-bin/operate_appmsg?token=$this->webtoken&lang=zh_CN&sub=list&t=ajax-appmsgs-fileselect&type=".$this->getPositiveMsgType($type)."&r=".mt_rand(0,10000)."&pageIdx=$pageIndex&pagesize=$pageSize&formid=file_from_".time()."&subtype=";
+            }
+            else
+            {
+                $url = "https://mp.weixin.qq.com/cgi-bin/filemanagepage?token=$this->webtoken&lang=zh_CN&t=ajax-fileselect&type=".$this->getPositiveMsgType($type)."&r=".mt_rand(0,10000)."&pageIdx=$pageIndex&pagesize=$pageSize&formid=file_from_".time();
+            }
             $postfields = array();
             $postfields['ajax'] = 1;
             $postfields['token'] = $this->webtoken;
@@ -1230,6 +1357,13 @@ class Wechat {
             if(!empty($result_json_decode['type']))
             {
                 $result_json_decode['List'] = (array)$result_json_decode['List'];
+//                if(Wechat::MSGTYPE_NEWS==$type)
+//                {
+//                    for($i=0;$i<count($result_json_decode['List']);$i++)
+//                    {
+//                        $result_json_decode['List'][$i]['appmsgList'] = (array)$result_json_decode['List'][$i]['appmsgList'];
+//                    }
+//                }
                 unset($result_json_decode['PageMsg']['passPage']);
                 unset($result_json_decode['PageMsg']['nextPage']);
                 unset($result_json_decode['PageMsg']['pageJump']);
@@ -1698,7 +1832,7 @@ class Wechat {
         }
         $singlepostfields = array();
         $singlepostfields['tofakeid'] = $singleMessageFields['fakeid'];
-        $singlepostfields['error'] = "false";
+        $singlepostfields['error'] = 'false';
         $singlepostfields['token'] = $this->webtoken;
         $singlepostfields['ajax'] = 1;
         if(isset($singleMessageFields['imgcode'])&&!empty($singleMessageFields['imgcode']))
@@ -1984,6 +2118,7 @@ class CurlHttp {
         curl_close($this->singlequeue);
         $this->singlequeue = null;
         return $this->_result;
+
     }
 
     /**
