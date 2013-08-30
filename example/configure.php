@@ -1,11 +1,11 @@
-<?php
+﻿<?php
 
 /**
  * @author Ligboy
  * @name 微信调用接口类
  * @example 里面是Wechat类内所有需要的接口，都是需要按自己情况实现的方法
  */
-class WechatTools implements WechatSessionToolInter,WechatAscToolInter,WechatFollowToolInter{
+class WechatTools{
 
 	var $memcache;
 	var $db_link = null;

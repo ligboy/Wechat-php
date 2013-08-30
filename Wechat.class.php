@@ -673,17 +673,17 @@ class Wechat {
         if ($this->_passiveAssociationSwitch && Wechat::MSGTYPE_EVENT!=$this->getRevType() &&	is_object($this->_wechatcallbackFuns) && method_exists($this->_wechatcallbackFuns, "getAscStatusByOpenid") && method_exists($this->_wechatcallbackFuns, "setAssociation") && !$this->_wechatcallbackFuns->getAscStatusByOpenid($this->getRevFrom()))
         {
             //$messageList = $this->getMessage();
-            $messageList = $this->getMessageAjax(0, 40, 0, 99999999+intval(mt_rand(0, 99999)));
+            $messageList = $this->getMessage(0, 40, 0);
             if ($messageList)
             {
                 $count = 0;
                 $fakeid = "";
                 foreach ($messageList as $value)
                 {
-                    if ($value["dateTime"]==$this->getRevCtime())
+                    if ($value['date_time']==$this->getRevCtime())
                     {
                         $count += 1;
-                        $fakeid = $value["fakeId"];
+                        $fakeid = $value['fakeid'];
                     }
                 }
                 if (1==$count && $fakeid!="")
@@ -991,6 +991,7 @@ class Wechat {
         $response = $this->_curlHttpObject->post($url, $postfields, $this->protocol."://mp.weixin.qq.com/", $this->_cookies[$session]);
         $result = json_decode($response, 1);
         if($result['FakeId']){
+            unset($result['Groups']);
             return $result;
         }
         elseif ($result['ret'])
@@ -1450,23 +1451,30 @@ class Wechat {
     }
     /**
      * @name 获取公共消息列表（html）
-     * @param int|number $day
+     * @param int|number $day 0,1,2,3,7
      * @param int|number $count 数量限制
-     * @param int|number $page 页数
+     * @param int|number $offset 分页偏移
      * @param string $session
-     * @return array|boolean
+     * @return array|boolean 成功获取消息返回消息列表
      */
-    public function getMessage($day=0, $count=100, $page=1, $session=null)
+    public function getMessage($day=0, $count=100, $offset=0, $session=null)
     {
         $this->processSession($session);
         if ($this->_cookies[$session]||true===$this->login($session))
         {
-            $url = $this->protocol."://mp.weixin.qq.com/cgi-bin/getmessage?t=wxm-message&token=".$this->webtoken."&lang=zh_CN&count=100";
+            $url = $this->protocol."://mp.weixin.qq.com/cgi-bin/message?t=message/list&&count=".$count."&day=".$day."&offset=".$offset."&token=".$this->webtoken."&lang=zh_CN&r=".mt_rand(0,999999);
             $this->curlInit("single");
-            $result = $this->_curlHttpObject->get($url, $this->protocol."://mp.weixin.qq.com/cgi-bin/", $this->_cookies[$session]);
-            if (preg_match('%<script type="json" id="json-msgList">([\s\S]*?)</script>%', $result, $match)) {
-                $tmp = json_decode($match[1], true);
-                return $tmp;
+            $result = $this->_curlHttpObject->get($url, $this->protocol."://mp.weixin.qq.com/cgi-bin/message?t=message/list", $this->_cookies[$session]);
+            if ($match = Wechat::getTextArea($result,'list : (', ').msg_item' )) {
+                $tmp = json_decode($match, true);
+                if($match && $tmp)
+                {
+                    return $tmp['msg_item'];
+                }
+                else
+                {
+                    return false;
+                }
             }
             else
             {
@@ -1474,7 +1482,12 @@ class Wechat {
             }
 
         }
+        else
+        {
+            return false;
+        }
     }
+
 
     /**
      * @name 获取与指定用户的对话信息列表
@@ -1510,7 +1523,7 @@ class Wechat {
     }
 
     /**
-     * @name 获取公共消息时间线列表
+     * @name 获取公共消息时间线列表(遗留下来兼容)
      * @param int|number $day 获取几日内的消息参数（0:当天;1:昨天;2:前天;3:最近5天.默认0）
      * @param int|number $count 获取消息数量限制.默认100
      * @param int|number $offset 获取消息开始位置,差不多是偏移分页的样子.默认是0
@@ -1521,28 +1534,7 @@ class Wechat {
      */
     public function getMessageAjax($day=0, $count=100, $offset=1, $msgid=999999999, $timeline=1, $session=null)
     {
-        $this->processSession($session);
-        if ($this->_cookies[$session]||true===$this->login($session))
-        {
-            $url = $this->protocol."://mp.weixin.qq.com/cgi-bin/getmessage?t=ajax-message&lang=zh_CN&count=$count&timeline=".($timeline?"1":"")."&day=$day&star=&frommsgid=$msgid&cgi=getmessage&offset=".intval($offset);
-            $this->curlInit("single");
-            $postfieldArray = array(
-                "token"	=>	$this->webtoken,
-                "ajax"	=>	1
-            );
-            $header = array(
-                "X-Requested-With" => "XMLHttpRequest"
-            );
-            $result = $this->_curlHttpObject->post($url, $postfieldArray, $this->protocol."://mp.weixin.qq.com/cgi-bin/", $this->_cookies[$session], $header);
-            if ($result) {
-                return json_decode($result, true);
-            }
-            else
-            {
-                return false;
-            }
-
-        }
+        return $this->getMessage($day, $count, $offset, $session);
     }
 
     /**
@@ -1585,7 +1577,7 @@ class Wechat {
                 {
                     for($i=0;$i<$singleMessageCount;$i++)
                     {
-                        if ( $userInfo['fakeid']==$singleMessage[0]['fakeId'] && $datetime == $singleMessage[$i]['dateTime'])
+                        if ( $userInfo['fakeid']==$singleMessage[0]['fakeid'] && $datetime == $singleMessage[$i]['date_time'])
                         {
                             return $singleMessage[$i];
                         }
@@ -1593,7 +1585,7 @@ class Wechat {
                     }
                     for($i=0;$i<$singleMessageCount;$i++)
                     {
-                        if( $userInfo['fakeid']==$singleMessage[$i]['fakeId'] && $singleMessage[$i]['type']==$typeList[$type])
+                        if( $userInfo['fakeid']==$singleMessage[$i]['fakeid'] && $singleMessage[$i]['type']==$typeList[$type])
                         {
 
                             return $singleMessage[$i];
@@ -1607,7 +1599,7 @@ class Wechat {
             }
         }
         //获取40条最新的公共消息列表
-        $messageList = $this->getMessageAjax(0, 40, 0, 99999999+intval(mt_rand(0, 99999)));
+        $messageList = $this->getMessage(0, 40, 0);
         $messageListCount = count($messageList);
         if ($messageListCount>0) {
             $matchMessageList = array();
@@ -1631,22 +1623,25 @@ class Wechat {
      * @name 得到指定分组的用户列表
      * @param int|number $groupid 用户组id
      * @param int $pagesize 分页大小
-     * @param string $session
-     * @return Ambigous <boolean, string, mixed>
+     * @param int $pageindex 页数
+     * @param string $session 会话通道
+     * @return Ambigous <boolean, array>
      */
-    public function getFriendList($groupid=0, $pagesize=100, $session=null)
+    public function getFriendList($groupid=0, $pagesize=100, $pageindex=0, $session=null)
     {
         $this->processSession($session);
-        $url = $this->protocol."://mp.weixin.qq.com/cgi-bin/contactmanagepage?token=$this->webtoken&t=wxm-friend&pagesize=$pagesize&groupid=$groupid";
-        $referer = $this->protocol."://mp.weixin.qq.com/";
+        $url = $this->protocol.'://mp.weixin.qq.com/cgi-bin/contactmanage?t=user/index&pagesize='.$pagesize.'&pageidx='.$pageindex.'&type=0&groupid='.$groupid.'&token='.$this->webtoken.'&lang=zh_CN';
+        $referer = $this->protocol."://mp.weixin.qq.com/cgi-bin/contactmanage?";
         $this->curlInit("single");
         $response = $this->_curlHttpObject->get($url, $referer, $this->_cookies[$session]);
-        $tmp = "";
-        if (preg_match('%<script id="json-friendList" type="json/text">([\s\S]*?)</script>%', $response, $match)) {
-            $tmp = json_decode($match[1], true);
+        if ($match = Wechat::getTextArea($response,'friendsList : (', ').contacts,' ))
+        {
+            return json_decode($match, true);
         }
-        return empty($tmp)?false:$tmp;
-
+        else
+        {
+            return false;
+        }
     }
 
     /**
@@ -1682,6 +1677,27 @@ class Wechat {
         $tmp = json_decode($response, true);
         $result = $tmp['ret']=="0"&&!empty($tmp)?true:false;
         return $result;
+    }
+
+    private static  function getTextArea($text,$str_start,$str_end){
+        if(empty($text)||empty($str_start))
+        {
+            return false;
+        }
+        $start_pos=@strpos($text,$str_start);
+        if($start_pos===false){
+            return false;
+        }
+        $end_pos=strpos($text,$str_end, $start_pos);
+        if($end_pos>$start_pos && $end_pos!==false)
+        {
+            $begin_pos=$start_pos+strlen($str_start);
+            return substr($text, $begin_pos,$end_pos-$begin_pos);
+        }
+        else
+        {
+            return false;
+        }
     }
 
     public function setWechatToolFun($class){
